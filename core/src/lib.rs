@@ -3,6 +3,7 @@
 #![deny(warnings)]
 #![forbid(unsafe_code, unused_variables, unused_imports)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![feature(trait_alias)]
 
 extern crate alloc;
 extern crate core;
@@ -21,14 +22,18 @@ pub use crate::opcode::Opcode;
 pub use crate::stack::Stack;
 pub use crate::valids::Valids;
 
-use crate::eval::{eval, Control};
+use crate::eval::Control;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use eval::{DispatchTable, CONCRETE_TABLE};
+use stack::StackItem;
 use core::ops::Range;
-use primitive_types::U256;
+use primitive_types::{U256, H256};
+
+pub type ConcreteMachine = Machine<H256>;
 
 /// Core execution layer for EVM.
-pub struct Machine {
+pub struct Machine<T: StackItem> {
 	/// Program data.
 	data: Rc<Vec<u8>>,
 	/// Program code.
@@ -42,16 +47,35 @@ pub struct Machine {
 	/// Memory.
 	memory: Memory,
 	/// Stack.
-	stack: Stack,
+	stack: Stack<T>,
+
+	table: DispatchTable<T>
 }
 
-impl Machine {
+impl Machine<H256> {
+	pub fn new_concrete(
+		code: Rc<Vec<u8>>,
+		data: Rc<Vec<u8>>,
+		stack_limit: usize,
+		memory_limit: usize,
+	) -> Self {
+		Self::new(
+			code,
+			data,
+			stack_limit,
+			memory_limit,
+			CONCRETE_TABLE,
+		)
+	}
+}
+
+impl<T: StackItem> Machine<T> {
 	/// Reference of machine stack.
-	pub fn stack(&self) -> &Stack {
+	pub fn stack(&self) -> &Stack<T> {
 		&self.stack
 	}
 	/// Mutable reference of machine stack.
-	pub fn stack_mut(&mut self) -> &mut Stack {
+	pub fn stack_mut(&mut self) -> &mut Stack<T> {
 		&mut self.stack
 	}
 	/// Reference of machine memory.
@@ -73,6 +97,7 @@ impl Machine {
 		data: Rc<Vec<u8>>,
 		stack_limit: usize,
 		memory_limit: usize,
+		table: DispatchTable<T>
 	) -> Self {
 		let valids = Valids::new(&code[..]);
 
@@ -84,6 +109,7 @@ impl Machine {
 			valids,
 			memory: Memory::new(memory_limit),
 			stack: Stack::new(stack_limit),
+			table
 		}
 	}
 
@@ -93,7 +119,7 @@ impl Machine {
 	}
 
 	/// Inspect the machine's next opcode and current stack.
-	pub fn inspect(&self) -> Option<(Opcode, &Stack)> {
+	pub fn inspect(&self) -> Option<(Opcode, &Stack<T>)> {
 		let position = match self.position {
 			Ok(position) => position,
 			Err(_) => return None,
@@ -146,7 +172,7 @@ impl Machine {
 			.map_err(|reason| Capture::Exit(reason.clone()))?;
 
 		match self.code.get(position).map(|v| Opcode(*v)) {
-			Some(opcode) => match eval(self, opcode, position) {
+			Some(opcode) => match self.table[opcode.as_usize()](self, opcode, position) {
 				Control::Continue(p) => {
 					self.position = Ok(position + p);
 					Ok(())

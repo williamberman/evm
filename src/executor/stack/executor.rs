@@ -1139,7 +1139,7 @@ impl<'config, 'precompiles, S: StackState<'config>, P: PrecompileSet> Handler
 		&mut self,
 		context: &Context,
 		opcode: Opcode,
-		stack: &Stack,
+		stack: &Stack<H256>,
 	) -> Result<(), ExitError> {
 		// log::trace!(target: "evm", "Running opcode: {:?}, Pre gas-left: {:?}", opcode, gasometer.gas());
 

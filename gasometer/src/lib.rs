@@ -438,7 +438,7 @@ pub fn static_opcode_cost(opcode: Opcode) -> Option<u64> {
 pub fn dynamic_opcode_cost<H: Handler>(
 	address: H160,
 	opcode: Opcode,
-	stack: &Stack,
+	stack: &Stack<H256>,
 	is_static: bool,
 	config: &Config,
 	handler: &H,

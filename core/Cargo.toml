@@ -15,6 +15,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"], opti
 scale-info = { version = "1.0.0", default-features = false, features = ["derive"], optional = true }
 # Work-around for https://github.com/myrrlyn/funty/issues/3
 funty = { version = "=1.1", default-features = false }
+amzn-smt-ir = { git = "https://github.com/awslabs/rust-smt-ir", version = "0.1", branch="main" }
 
 [dev-dependencies]
 hex = "0.4"

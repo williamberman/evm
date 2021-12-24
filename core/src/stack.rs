@@ -1,15 +1,24 @@
 use crate::ExitError;
 use alloc::vec::Vec;
-use primitive_types::H256;
+// use amzn_smt_ir::Term;
+// use primitive_types::H256;
+
+pub trait StackItem = Copy;
+
+// #[derive(Clone, Debug)]
+// pub enum SymStackItem {
+// 	Concrete(H256),
+// 	Symbolic(Term)
+// }
 
 /// EVM stack.
 #[derive(Clone, Debug)]
-pub struct Stack {
-	data: Vec<H256>,
+pub struct Stack<T: StackItem> {
+	data: Vec<T>,
 	limit: usize,
 }
 
-impl Stack {
+impl<T: StackItem> Stack<T> {
 	/// Create a new stack with given limit.
 	pub fn new(limit: usize) -> Self {
 		Self {
@@ -37,22 +46,16 @@ impl Stack {
 	}
 
 	#[inline]
-	/// Stack data.
-	pub fn data(&self) -> &Vec<H256> {
-		&self.data
-	}
-
-	#[inline]
 	/// Pop a value from the stack. If the stack is already empty, returns the
 	/// `StackUnderflow` error.
-	pub fn pop(&mut self) -> Result<H256, ExitError> {
+	pub fn pop(&mut self) -> Result<T, ExitError> {
 		self.data.pop().ok_or(ExitError::StackUnderflow)
 	}
 
 	#[inline]
 	/// Push a new value into the stack. If it will exceed the stack limit,
 	/// returns `StackOverflow` error and leaves the stack unchanged.
-	pub fn push(&mut self, value: H256) -> Result<(), ExitError> {
+	pub fn push(&mut self, value: T) -> Result<(), ExitError> {
 		if self.data.len() + 1 > self.limit {
 			return Err(ExitError::StackOverflow);
 		}
@@ -64,7 +67,7 @@ impl Stack {
 	/// Peek a value at given index for the stack, where the top of
 	/// the stack is at index `0`. If the index is too large,
 	/// `StackError::Underflow` is returned.
-	pub fn peek(&self, no_from_top: usize) -> Result<H256, ExitError> {
+	pub fn peek(&self, no_from_top: usize) -> Result<T, ExitError> {
 		if self.data.len() > no_from_top {
 			Ok(self.data[self.data.len() - no_from_top - 1])
 		} else {
@@ -76,7 +79,7 @@ impl Stack {
 	/// Set a value at given index for the stack, where the top of the
 	/// stack is at index `0`. If the index is too large,
 	/// `StackError::Underflow` is returned.
-	pub fn set(&mut self, no_from_top: usize, val: H256) -> Result<(), ExitError> {
+	pub fn set(&mut self, no_from_top: usize, val: T) -> Result<(), ExitError> {
 		if self.data.len() > no_from_top {
 			let len = self.data.len();
 			self.data[len - no_from_top - 1] = val;

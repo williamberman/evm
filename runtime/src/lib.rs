@@ -107,7 +107,7 @@ macro_rules! step {
 ///
 /// The runtime wraps an EVM `Machine` with support of return data and context.
 pub struct Runtime<'config> {
-	machine: Machine,
+	machine: ConcreteMachine,
 	status: Result<(), ExitReason>,
 	return_data_buffer: Vec<u8>,
 	context: Context,
@@ -123,7 +123,7 @@ impl<'config> Runtime<'config> {
 		config: &'config Config,
 	) -> Self {
 		Self {
-			machine: Machine::new(code, data, config.stack_limit, config.memory_limit),
+			machine: Machine::new_concrete(code, data, config.stack_limit, config.memory_limit),
 			status: Ok(()),
 			return_data_buffer: Vec::new(),
 			context,
@@ -132,7 +132,7 @@ impl<'config> Runtime<'config> {
 	}
 
 	/// Get a reference to the machine.
-	pub fn machine(&self) -> &Machine {
+	pub fn machine(&self) -> &ConcreteMachine {
 		&self.machine
 	}
 

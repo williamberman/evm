@@ -6,10 +6,10 @@ mod misc;
 
 use crate::{
 	stack::{StackItem, SymStackItem},
-	ExitError, ExitReason, ExitSucceed, Machine, Opcode, symbolic,
+	symbolic, ExitError, ExitReason, ExitSucceed, Machine, Opcode,
 };
+use amzn_smt_ir::{logic::BvOp};
 use core::ops::{BitAnd, BitOr, BitXor};
-use amzn_smt_ir::logic::{BvOp};
 use primitive_types::{H256, U256};
 use smallvec::smallvec;
 
@@ -30,54 +30,15 @@ fn eval_add(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Con
 }
 
 fn sym_eval_add(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	let op1 = match state.stack.pop() {
-		Ok(value) => value,
-		Err(e) => return Control::Exit(e.into()),
-	};
-
-	let op2 = match state.stack.pop() {
-		Ok(value) => value,
-		Err(e) => return Control::Exit(e.into()),
-	};
-
-	let ret = match (op1, op2) {
-		(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-			let v = U256::from_big_endian(&xop1[..])
-				.overflowing_add(U256::from_big_endian(&xop2[..]))
-				.0;
-
-			let mut xv = H256::default();
-
-			v.to_big_endian(&mut xv[..]);
-
-			SymStackItem::Concrete(xv)
-		}
-
-		(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(xop2)) => {
-			let xxop1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
-			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xxop1, xop2]).into())
-		},
-
-		(SymStackItem::Symbolic(xop1), SymStackItem::Concrete(xop2)) => {
-			let xxop2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
-			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xop1, xxop2]).into())
-		},
-
-		(SymStackItem::Symbolic(xop1), SymStackItem::Symbolic(xop2)) => {
-			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xop1, xop2]).into())
-		},
-	};
-
-	match state.stack.push(ret) {
-		Ok(()) => (),
-		Err(e) => return Control::Exit(e.into()),
-	}
-
-	Control::Continue(1)
+	op2_sym_tuple!(state, overflowing_add, BvOp::BvAdd)
 }
 
 fn eval_mul(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_tuple!(state, overflowing_mul)
+}
+
+fn sym_eval_mul(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
+	op2_sym_tuple!(state, overflowing_mul, BvOp::BvMul)
 }
 
 fn eval_sub(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
@@ -637,6 +598,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::ADD.as_usize()] = sym_eval_add as _;
+	table[Opcode::MUL.as_usize()] = sym_eval_mul as _;
 
 	table
 };

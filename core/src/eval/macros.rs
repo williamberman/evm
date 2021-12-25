@@ -93,6 +93,44 @@ macro_rules! op2_u256_tuple {
 	}};
 }
 
+macro_rules! op2_sym_tuple {
+	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+		pop!($machine, op1, op2);
+
+		let ret = match (op1, op2) {
+			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+				let v = U256::from_big_endian(&xop1[..])
+					.$concrete_op(U256::from_big_endian(&xop2[..]))
+					.0;
+
+				let mut xv = H256::default();
+
+				v.to_big_endian(&mut xv[..]);
+
+				SymStackItem::Concrete(xv)
+			}
+
+			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(xop2)) => {
+				let xxop1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op(smallvec![xxop1, xop2]).into())
+			}
+
+			(SymStackItem::Symbolic(xop1), SymStackItem::Concrete(xop2)) => {
+				let xxop2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op(smallvec![xop1, xxop2]).into())
+			}
+
+			(SymStackItem::Symbolic(xop1), SymStackItem::Symbolic(xop2)) => {
+				SymStackItem::Symbolic($symbolic_op(smallvec![xop1, xop2]).into())
+			}
+		};
+
+		push!($machine, ret);
+
+		Control::Continue(1)
+	}};
+}
+
 macro_rules! op2_u256_fn {
 	( $machine:expr, $op:path ) => {{
 		pop_u256!($machine, op1, op2);

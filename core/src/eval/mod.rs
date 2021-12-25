@@ -61,6 +61,10 @@ fn eval_sdiv(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Co
 	op2_u256_fn!(state, self::arithmetic::sdiv)
 }
 
+fn sym_eval_sdiv(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
+	op2_sym_fn!(state, self::arithmetic::sdiv, BvOp::BvSdiv)
+}
+
 fn eval_mod(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::arithmetic::rem)
 }
@@ -609,6 +613,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::MUL.as_usize()] = sym_eval_mul as _;
 	table[Opcode::SUB.as_usize()] = sym_eval_sub as _;
 	table[Opcode::DIV.as_usize()] = sym_eval_div as _;
+	table[Opcode::SDIV.as_usize()] = sym_eval_sdiv as _;
 
 	table
 };

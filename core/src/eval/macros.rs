@@ -93,8 +93,8 @@ macro_rules! op2_u256_tuple {
 	}};
 }
 
-macro_rules! op2_sym_tuple {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+macro_rules! op2_sym_tuple_helper {
+	( $machine:expr, $concrete_op:ident, $symbolic_op:expr, $arg1:ident, $arg2:ident ) => {{
 		pop!($machine, op1, op2);
 
 		let ret = match (op1, op2) {
@@ -110,18 +110,18 @@ macro_rules! op2_sym_tuple {
 				SymStackItem::Concrete(xv)
 			}
 
-			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(xop2)) => {
-				let xxop1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op(smallvec![xxop1, xop2]).into())
+			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic($arg2)) => {
+				let $arg1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op.into())
 			}
 
-			(SymStackItem::Symbolic(xop1), SymStackItem::Concrete(xop2)) => {
-				let xxop2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op(smallvec![xop1, xxop2]).into())
+			(SymStackItem::Symbolic($arg1), SymStackItem::Concrete(xop2)) => {
+				let $arg2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op.into())
 			}
 
-			(SymStackItem::Symbolic(xop1), SymStackItem::Symbolic(xop2)) => {
-				SymStackItem::Symbolic($symbolic_op(smallvec![xop1, xop2]).into())
+			(SymStackItem::Symbolic($arg1), SymStackItem::Symbolic($arg2)) => {
+				SymStackItem::Symbolic($symbolic_op.into())
 			}
 		};
 
@@ -129,6 +129,18 @@ macro_rules! op2_sym_tuple {
 
 		Control::Continue(1)
 	}};
+}
+
+macro_rules! op2_sym_tuple_vec {
+	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+		op2_sym_tuple_helper!($machine, $concrete_op, $symbolic_op(smallvec![arg1, arg2]), arg1, arg2)
+	}}
+}
+
+macro_rules! op2_sym_tuple_2_args {
+	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+		op2_sym_tuple_helper!($machine, $concrete_op, $symbolic_op(arg1, arg2), arg1, arg2)
+	}}
 }
 
 macro_rules! op2_u256_fn {

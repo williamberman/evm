@@ -15,6 +15,7 @@ mod opcode;
 mod stack;
 mod utils;
 mod valids;
+mod symbolic;
 
 pub use crate::error::{Capture, ExitError, ExitFatal, ExitReason, ExitRevert, ExitSucceed, Trap};
 pub use crate::memory::Memory;
@@ -25,8 +26,8 @@ pub use crate::valids::Valids;
 use crate::eval::Control;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use eval::{DispatchTable, CONCRETE_TABLE};
-use stack::StackItem;
+use eval::{DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
+use stack::{StackItem, SymStackItem};
 use core::ops::Range;
 use primitive_types::{U256, H256};
 
@@ -65,6 +66,23 @@ impl Machine<H256> {
 			stack_limit,
 			memory_limit,
 			CONCRETE_TABLE,
+		)
+	}
+}
+
+impl Machine<SymStackItem> {
+	pub fn new_symbolic(
+		code: Rc<Vec<u8>>,
+		data: Rc<Vec<u8>>,
+		stack_limit: usize,
+		memory_limit: usize,
+	) -> Self {
+		Self::new(
+			code,
+			data,
+			stack_limit,
+			memory_limit,
+			SYMBOLIC_TABLE,
 		)
 	}
 }

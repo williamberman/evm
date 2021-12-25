@@ -4,9 +4,14 @@ mod arithmetic;
 mod bitwise;
 mod misc;
 
-use crate::{stack::StackItem, ExitError, ExitReason, ExitSucceed, Machine, Opcode};
+use crate::{
+	stack::{StackItem, SymStackItem},
+	ExitError, ExitReason, ExitSucceed, Machine, Opcode, symbolic,
+};
 use core::ops::{BitAnd, BitOr, BitXor};
+use amzn_smt_ir::logic::{BvOp};
 use primitive_types::{H256, U256};
+use smallvec::smallvec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Control {
@@ -22,6 +27,53 @@ fn eval_stop<T: StackItem>(_state: &mut Machine<T>, _opcode: Opcode, _position: 
 
 fn eval_add(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_tuple!(state, overflowing_add)
+}
+
+fn sym_eval_add(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
+	let op1 = match state.stack.pop() {
+		Ok(value) => value,
+		Err(e) => return Control::Exit(e.into()),
+	};
+
+	let op2 = match state.stack.pop() {
+		Ok(value) => value,
+		Err(e) => return Control::Exit(e.into()),
+	};
+
+	let ret = match (op1, op2) {
+		(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+			let v = U256::from_big_endian(&xop1[..])
+				.overflowing_add(U256::from_big_endian(&xop2[..]))
+				.0;
+
+			let mut xv = H256::default();
+
+			v.to_big_endian(&mut xv[..]);
+
+			SymStackItem::Concrete(xv)
+		}
+
+		(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(xop2)) => {
+			let xxop1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xxop1, xop2]).into())
+		},
+
+		(SymStackItem::Symbolic(xop1), SymStackItem::Concrete(xop2)) => {
+			let xxop2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xop1, xxop2]).into())
+		},
+
+		(SymStackItem::Symbolic(xop1), SymStackItem::Symbolic(xop2)) => {
+			SymStackItem::Symbolic(BvOp::BvAdd(smallvec![xop1, xop2]).into())
+		},
+	};
+
+	match state.stack.push(ret) {
+		Ok(()) => (),
+		Err(e) => return Control::Exit(e.into()),
+	}
+
+	Control::Continue(1)
 }
 
 fn eval_mul(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
@@ -60,11 +112,7 @@ fn eval_exp(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Con
 	op2_u256_fn!(state, self::arithmetic::exp)
 }
 
-fn eval_signextend(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_signextend(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::arithmetic::signextend)
 }
 
@@ -124,43 +172,23 @@ fn eval_sar(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Con
 	op2_u256_fn!(state, self::bitwise::sar)
 }
 
-fn eval_codesize(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_codesize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::codesize(state)
 }
 
-fn eval_codecopy(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_codecopy(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::codecopy(state)
 }
 
-fn eval_calldataload(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_calldataload(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldataload(state)
 }
 
-fn eval_calldatasize(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_calldatasize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldatasize(state)
 }
 
-fn eval_calldatacopy(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_calldatacopy(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldatacopy(state)
 }
 
@@ -176,11 +204,7 @@ fn eval_mstore(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> 
 	self::misc::mstore(state)
 }
 
-fn eval_mstore8(
-	state: &mut Machine<H256>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
+fn eval_mstore8(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::mstore8(state)
 }
 
@@ -488,7 +512,8 @@ fn eval_external<T: StackItem>(
 	Control::Trap(opcode)
 }
 
-pub type DispatchTable<T> = [fn(state: &mut Machine<T>, opcode: Opcode, position: usize) -> Control; 256];
+pub type DispatchTable<T> =
+	[fn(state: &mut Machine<T>, opcode: Opcode, position: usize) -> Control; 256];
 
 pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	let mut table = [eval_external as _; 256];
@@ -608,4 +633,10 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table
 };
 
-// TODO(here) -- Make a dispatch table for symbolic op codes
+pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
+	let mut table = [eval_external as _; 256];
+
+	table[Opcode::ADD.as_usize()] = sym_eval_add as _;
+
+	table
+};

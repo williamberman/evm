@@ -16,6 +16,9 @@ scale-info = { version = "1.0.0", default-features = false, features = ["derive"
 # Work-around for https://github.com/myrrlyn/funty/issues/3
 funty = { version = "=1.1", default-features = false }
 amzn-smt-ir = { git = "https://github.com/awslabs/rust-smt-ir", version = "0.1", branch="main" }
+smallvec = "1.6"
+num = "0.3.1"
+hex = "0.4.3"
 
 [dev-dependencies]
 hex = "0.4"

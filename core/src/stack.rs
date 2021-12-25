@@ -5,7 +5,7 @@ use primitive_types::H256;
 
 pub trait StackItem = Clone;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SymStackItem {
 	Concrete(H256),
 	Symbolic(Term)

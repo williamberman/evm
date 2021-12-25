@@ -13,23 +13,23 @@ mod eval;
 mod memory;
 mod opcode;
 mod stack;
+mod symbolic;
 mod utils;
 mod valids;
-mod symbolic;
 
 pub use crate::error::{Capture, ExitError, ExitFatal, ExitReason, ExitRevert, ExitSucceed, Trap};
 pub use crate::memory::Memory;
 pub use crate::opcode::Opcode;
-pub use crate::stack::Stack;
+pub use crate::stack::{Stack, SymStackItem};
 pub use crate::valids::Valids;
 
 use crate::eval::Control;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use eval::{DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
-use stack::{StackItem, SymStackItem};
 use core::ops::Range;
-use primitive_types::{U256, H256};
+use eval::{DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
+use primitive_types::{H256, U256};
+use stack::StackItem;
 
 pub type ConcreteMachine = Machine<H256>;
 
@@ -50,7 +50,7 @@ pub struct Machine<T: StackItem> {
 	/// Stack.
 	stack: Stack<T>,
 
-	table: DispatchTable<T>
+	table: DispatchTable<T>,
 }
 
 impl Machine<H256> {
@@ -60,13 +60,7 @@ impl Machine<H256> {
 		stack_limit: usize,
 		memory_limit: usize,
 	) -> Self {
-		Self::new(
-			code,
-			data,
-			stack_limit,
-			memory_limit,
-			CONCRETE_TABLE,
-		)
+		Self::new(code, data, stack_limit, memory_limit, CONCRETE_TABLE)
 	}
 }
 
@@ -77,13 +71,7 @@ impl Machine<SymStackItem> {
 		stack_limit: usize,
 		memory_limit: usize,
 	) -> Self {
-		Self::new(
-			code,
-			data,
-			stack_limit,
-			memory_limit,
-			SYMBOLIC_TABLE,
-		)
+		Self::new(code, data, stack_limit, memory_limit, SYMBOLIC_TABLE)
 	}
 }
 
@@ -115,7 +103,7 @@ impl<T: StackItem> Machine<T> {
 		data: Rc<Vec<u8>>,
 		stack_limit: usize,
 		memory_limit: usize,
-		table: DispatchTable<T>
+		table: DispatchTable<T>,
 	) -> Self {
 		let valids = Valids::new(&code[..]);
 
@@ -127,7 +115,7 @@ impl<T: StackItem> Machine<T> {
 			valids,
 			memory: Memory::new(memory_limit),
 			stack: Stack::new(stack_limit),
-			table
+			table,
 		}
 	}
 
@@ -213,5 +201,66 @@ impl<T: StackItem> Machine<T> {
 				Err(Capture::Exit(ExitSucceed::Stopped.into()))
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::{symbolic::bv_constant, Machine, Opcode, SymStackItem};
+	use amzn_smt_ir::{logic::BvOp, Term};
+	use primitive_types::H256;
+	use smallvec::smallvec;
+	use std::rc::Rc;
+
+	#[test]
+	fn test_concrete_add() {
+		let a = H256::from_low_u64_be(255);
+		let b = H256::from_low_u64_be(1);
+
+		let code: Vec<u8> = vec![Opcode::ADD.0];
+		let data: Vec<u8> = vec![];
+
+		let stack_limit = 1024;
+		let memory_limit = 10000;
+
+		let mut m = Machine::new_symbolic(Rc::new(code), Rc::new(data), stack_limit, memory_limit);
+
+		m.stack_mut().push(SymStackItem::Concrete(a)).unwrap();
+		m.stack_mut().push(SymStackItem::Concrete(b)).unwrap();
+
+		m.step().unwrap();
+
+		assert_eq!(
+			m.stack().peek(0).unwrap(),
+			SymStackItem::Concrete(H256::from_low_u64_be(256))
+		);
+	}
+
+	#[test]
+	fn test_concrete_symbolic_add() {
+		let a = H256::from_low_u64_be(255);
+		let b = Term::Variable("b".into());
+
+		let code: Vec<u8> = vec![Opcode::ADD.0];
+		let data: Vec<u8> = vec![];
+
+		let stack_limit = 1024;
+		let memory_limit = 10000;
+
+		let mut m = Machine::new_symbolic(Rc::new(code), Rc::new(data), stack_limit, memory_limit);
+
+		m.stack_mut().push(SymStackItem::Concrete(a)).unwrap();
+		m.stack_mut()
+			.push(SymStackItem::Symbolic(b.clone()))
+			.unwrap();
+
+		m.step().unwrap();
+
+		assert_eq!(
+			m.stack().peek(0).unwrap(),
+			SymStackItem::Symbolic(
+				BvOp::BvAdd(smallvec![b, bv_constant(a.as_bytes().to_vec())]).into()
+			)
+		);
 	}
 }

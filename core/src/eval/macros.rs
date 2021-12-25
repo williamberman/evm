@@ -243,3 +243,51 @@ macro_rules! as_usize_or_fail {
 		$v.as_usize()
 	}};
 }
+
+macro_rules! op_evals_helper {
+	// These two matches are intentionally the same except for the fragment specifier on
+	// $concrete. It would be nice to have a compound fragment specifier or a "larger"
+	// specifier that subsumes both.
+
+	// TODO need better arg names than xconcrete and xsymbolic
+	( $name:ident, $concrete:ident, $symbolic:path, $xconcrete: ident, $xsymbolic: ident ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				$xconcrete!(state, $concrete)
+			},
+			symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| {
+				$xsymbolic!(state, $concrete, $symbolic)
+			}
+		};
+	};
+
+	// TODO need better arg names than xconcrete and xsymbolic
+	( $name:ident, $concrete:path, $symbolic:path, $xconcrete: ident, $xsymbolic: ident ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				$xconcrete!(state, $concrete)
+			},
+			symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| {
+				$xsymbolic!(state, $concrete, $symbolic)
+			}
+		};
+	};
+}
+
+macro_rules! op_evals {
+	( $name:ident, $concrete:ident, $symbolic:path ) => {
+		op_evals_helper!($name, $concrete, $symbolic, op2_u256_tuple, op2_sym_tuple_vec );
+	}
+}
+
+macro_rules! op_evals_vec {
+	( $name:ident, $concrete:ident, $symbolic:path ) => {
+		op_evals_helper!($name, $concrete, $symbolic, op2_u256_tuple, op2_sym_tuple_2_args );
+	}
+}
+
+macro_rules! op_evals_fn {
+	( $name:ident, $concrete:path, $symbolic:path ) => {
+		op_evals_helper!($name, $concrete, $symbolic, op2_u256_fn, op2_sym_fn );
+	}
+}

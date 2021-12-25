@@ -21,49 +21,22 @@ pub enum Control {
 	Trap(Opcode),
 }
 
+type OpEval<T> = fn(state: &mut Machine<T>, opcode: Opcode, position: usize) -> Control;
+
+struct OpEvals {
+	concrete: OpEval<H256>,
+	symbolic: OpEval<SymStackItem>,
+}
+
 fn eval_stop<T: StackItem>(_state: &mut Machine<T>, _opcode: Opcode, _position: usize) -> Control {
 	Control::Exit(ExitSucceed::Stopped.into())
 }
 
-fn eval_add(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_tuple!(state, overflowing_add)
-}
-
-fn sym_eval_add(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	op2_sym_tuple_vec!(state, overflowing_add, BvOp::BvAdd)
-}
-
-fn eval_mul(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_tuple!(state, overflowing_mul)
-}
-
-fn sym_eval_mul(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	op2_sym_tuple_vec!(state, overflowing_mul, BvOp::BvMul)
-}
-
-fn eval_sub(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_tuple!(state, overflowing_sub)
-}
-
-fn sym_eval_sub(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	op2_sym_tuple_2_args!(state, overflowing_sub, BvOp::BvSub)
-}
-
-fn eval_div(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::arithmetic::div)
-}
-
-fn sym_eval_div(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	op2_sym_fn!(state, self::arithmetic::div, BvOp::BvUdiv)
-}
-
-fn eval_sdiv(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::arithmetic::sdiv)
-}
-
-fn sym_eval_sdiv(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
-	op2_sym_fn!(state, self::arithmetic::sdiv, BvOp::BvSdiv)
-}
+op_evals!(ADD, overflowing_add, BvOp::BvAdd);
+op_evals!(MUL, overflowing_mul, BvOp::BvMul);
+op_evals_vec!(SUB, overflowing_sub, BvOp::BvSub);
+op_evals_fn!(DIV, self::arithmetic::div, BvOp::BvUdiv);
+op_evals_fn!(SDIV, self::arithmetic::sdiv, BvOp::BvSdiv);
 
 fn eval_mod(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::arithmetic::rem)
@@ -492,11 +465,11 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::STOP.as_usize()] = eval_stop as _;
-	table[Opcode::ADD.as_usize()] = eval_add as _;
-	table[Opcode::MUL.as_usize()] = eval_mul as _;
-	table[Opcode::SUB.as_usize()] = eval_sub as _;
-	table[Opcode::DIV.as_usize()] = eval_div as _;
-	table[Opcode::SDIV.as_usize()] = eval_sdiv as _;
+	table[Opcode::ADD.as_usize()] = ADD.concrete as _;
+	table[Opcode::MUL.as_usize()] = MUL.concrete as _;
+	table[Opcode::SUB.as_usize()] = SUB.concrete as _;
+	table[Opcode::DIV.as_usize()] = DIV.concrete as _;
+	table[Opcode::SDIV.as_usize()] = SDIV.concrete as _;
 	table[Opcode::MOD.as_usize()] = eval_mod as _;
 	table[Opcode::SMOD.as_usize()] = eval_smod as _;
 	table[Opcode::ADDMOD.as_usize()] = eval_addmod as _;
@@ -609,11 +582,11 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	let mut table = [eval_external as _; 256];
 
-	table[Opcode::ADD.as_usize()] = sym_eval_add as _;
-	table[Opcode::MUL.as_usize()] = sym_eval_mul as _;
-	table[Opcode::SUB.as_usize()] = sym_eval_sub as _;
-	table[Opcode::DIV.as_usize()] = sym_eval_div as _;
-	table[Opcode::SDIV.as_usize()] = sym_eval_sdiv as _;
+	table[Opcode::ADD.as_usize()] = ADD.symbolic as _;
+	table[Opcode::MUL.as_usize()] = MUL.symbolic as _;
+	table[Opcode::SUB.as_usize()] = SUB.symbolic as _;
+	table[Opcode::DIV.as_usize()] = DIV.symbolic as _;
+	table[Opcode::SDIV.as_usize()] = SDIV.symbolic as _;
 
 	table
 };

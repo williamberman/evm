@@ -131,14 +131,53 @@ macro_rules! op2_sym_tuple_helper {
 	}};
 }
 
+macro_rules! op2_sym_fn_helper {
+	( $machine:expr, $concrete_op:path, $symbolic_op:expr, $arg1:ident, $arg2:ident ) => {{
+		pop!($machine, op1, op2);
+
+		let ret = match (op1, op2) {
+			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+				let v = $concrete_op(
+					U256::from_big_endian(&xop1[..]),
+					U256::from_big_endian(&xop2[..])
+				);
+
+				let mut xv = H256::default();
+
+				v.to_big_endian(&mut xv[..]);
+
+				SymStackItem::Concrete(xv)
+			}
+
+			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic($arg2)) => {
+				let $arg1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op.into())
+			}
+
+			(SymStackItem::Symbolic($arg1), SymStackItem::Concrete(xop2)) => {
+				let $arg2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+				SymStackItem::Symbolic($symbolic_op.into())
+			}
+
+			(SymStackItem::Symbolic($arg1), SymStackItem::Symbolic($arg2)) => {
+				SymStackItem::Symbolic($symbolic_op.into())
+			}
+		};
+
+		push!($machine, ret);
+
+		Control::Continue(1)
+	}};
+}
+
 macro_rules! op2_sym_tuple_vec {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+	( $machine:expr, $concrete_op:ident, $symbolic_op:path) => {{
 		op2_sym_tuple_helper!($machine, $concrete_op, $symbolic_op(smallvec![arg1, arg2]), arg1, arg2)
 	}}
 }
 
 macro_rules! op2_sym_tuple_2_args {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:expr ) => {{
+	( $machine:expr, $concrete_op:ident, $symbolic_op:path) => {{
 		op2_sym_tuple_helper!($machine, $concrete_op, $symbolic_op(arg1, arg2), arg1, arg2)
 	}}
 }
@@ -151,6 +190,12 @@ macro_rules! op2_u256_fn {
 
 		Control::Continue(1)
 	}};
+}
+
+macro_rules! op2_sym_fn {
+	( $machine:expr, $concrete_op:path, $symbolic_op:path ) => {{
+		op2_sym_fn_helper!($machine, $concrete_op, $symbolic_op(arg1, arg2), arg1, arg2)
+	}}
 }
 
 macro_rules! op3_u256_fn {

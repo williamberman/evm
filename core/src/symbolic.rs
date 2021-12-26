@@ -18,6 +18,15 @@ pub fn bv_constant(x: Hexadecimal) -> Term<ALL> {
     return Term::Constant(IConst::from(Constant::Hexadecimal(x)));
 }
 
+// TODO probably more efficient way to do this.
+pub fn bv_512_zero() -> Term<ALL> {
+    let x: [u8; 128] = [
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    ];
+
+    bv_constant(x.to_vec())
+}
+
 #[allow(dead_code)]
 // TODO make generic
 fn script(variables: &[(Term<ALL>, ISort)], assertions: &[Term<ALL>]) -> Script<Term<ALL>> {

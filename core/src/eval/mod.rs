@@ -6,13 +6,16 @@ mod misc;
 
 use crate::{
 	stack::{StackItem, SymStackItem},
-	symbolic::{self, bv_constant},
+	symbolic::{self, bv_512_zero, bv_constant},
 	ExitError, ExitReason, ExitSucceed, Machine, Opcode,
 };
-use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
-use num::{bigint::ToBigUint};
+use amzn_smt_ir::{
+	logic::{BvOp, ALL},
+	CoreOp, ILet, ISymbol, Index, Let, Symbol, Term,
+};
 use core::ops::{BitAnd, BitOr, BitXor};
-use primitive_types::{H256, U256};
+use num::bigint::ToBigUint;
+use primitive_types::{H256, H512, U256, U512};
 use smallvec::smallvec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -30,6 +33,13 @@ struct OpEvals {
 	symbolic: OpEval<SymStackItem>,
 }
 
+fn to_sym(op: SymStackItem) -> Term<ALL> {
+	match op {
+		SymStackItem::Concrete(xop) => symbolic::bv_constant(xop.as_bytes().to_vec()),
+		SymStackItem::Symbolic(xsym) => xsym,
+	}
+}
+
 fn eval_stop<T: StackItem>(_state: &mut Machine<T>, _opcode: Opcode, _position: usize) -> Control {
 	Control::Exit(ExitSucceed::Stopped.into())
 }
@@ -42,9 +52,205 @@ op2_evals_fn!(SDIV, self::arithmetic::sdiv, BvOp::BvSdiv);
 op2_evals_fn!(MOD, self::arithmetic::rem, BvOp::BvUrem);
 op2_evals_fn!(SMOD, self::arithmetic::srem, BvOp::BvSrem);
 
-fn eval_addmod(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op3_u256_fn!(state, self::arithmetic::addmod)
-}
+static ADDMOD: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		op3_u256_fn!(state, self::arithmetic::addmod)
+	},
+
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		pop!(state, op1, op2, op3);
+
+		let ret = match (op1.clone(), op2.clone(), op3.clone()) {
+			(
+				SymStackItem::Concrete(xop1),
+				SymStackItem::Concrete(xop2),
+				SymStackItem::Concrete(xop3),
+			) => {
+				let xxop1 = U256::from_big_endian(&xop1[..]);
+				let xxop2 = U256::from_big_endian(&xop2[..]);
+				let xxop3 = U256::from_big_endian(&xop3[..]);
+
+				let v = self::arithmetic::addmod(xxop1, xxop2, xxop3);
+				let mut xv = H256::default();
+				v.to_big_endian(&mut xv[..]);
+
+				SymStackItem::Concrete(xv)
+			}
+
+			(
+				SymStackItem::Concrete(xop1),
+				SymStackItem::Concrete(xop2),
+				SymStackItem::Symbolic(sym3),
+			) => {
+				let xxop1: U512 = U256::from_big_endian(&xop1[..]).into();
+				let xxop2: U512 = U256::from_big_endian(&xop2[..]).into();
+
+				let mut s = H512::default();
+				(xxop1 + xxop2).to_big_endian(&mut s[..]);
+				let xs = bv_constant(s.as_bytes().to_vec());
+
+				let xsym3 = ISymbol::from(Symbol("op3".into()));
+
+				let body: Term = CoreOp::Ite(
+					CoreOp::Eq(smallvec![xsym3.clone().into(), bv_512_zero()]).into(),
+					bv_512_zero(),
+					BvOp::BvUrem(xs, xsym3.clone().into()).into(),
+				)
+				.into();
+
+				let xlet: Let<Term> = Let {
+					bindings: vec![(
+						xsym3,
+						BvOp::ZeroExtend(
+							[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+							sym3,
+						)
+						.into(),
+					)],
+					term: body,
+				};
+
+				SymStackItem::Symbolic(
+					BvOp::Extract(
+						[
+							Index::Numeral(255_i32.to_biguint().unwrap()).into(),
+							Index::Numeral(0_i32.to_biguint().unwrap()).into(),
+						],
+						Term::Let(ILet::from(xlet)),
+					)
+					.into(),
+				)
+			}
+
+			(
+				SymStackItem::Symbolic(sym1),
+				SymStackItem::Symbolic(sym2),
+				SymStackItem::Concrete(xop3),
+			) => {
+				let xxop3: U512 = U256::from_big_endian(&xop3[..]).into();
+
+				if xxop3 == U512::zero() {
+					let mut v = H256::default();
+					U256::zero().to_big_endian(&mut v[..]);
+					SymStackItem::Concrete(v)
+				} else {
+					let mut xxxop3 = H512::default();
+					xxop3.to_big_endian(&mut xxxop3[..]);
+					let xxxxop3 = bv_constant(xxxop3.as_bytes().to_vec());
+
+					let xsym1 = ISymbol::from(Symbol("op1".into()));
+					let xsym2 = ISymbol::from(Symbol("op2".into()));
+
+					let body: Term = BvOp::BvUrem(
+						BvOp::BvAdd(smallvec![xsym1.clone().into(), xsym2.clone().into()]).into(),
+						xxxxop3,
+					)
+					.into();
+
+					let xlet: Let<Term> = Let {
+						bindings: vec![
+							(
+								xsym1,
+								BvOp::ZeroExtend(
+									[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+									sym1,
+								)
+								.into(),
+							),
+							(
+								xsym2,
+								BvOp::ZeroExtend(
+									[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+									sym2,
+								)
+								.into(),
+							),
+						],
+						term: body,
+					};
+
+					SymStackItem::Symbolic(
+						BvOp::Extract(
+							[
+								Index::Numeral(255_i32.to_biguint().unwrap()).into(),
+								Index::Numeral(0_i32.to_biguint().unwrap()).into(),
+							],
+							Term::Let(ILet::from(xlet)),
+						)
+						.into(),
+					)
+				}
+			}
+
+			// TODO -- we should probably be zero extending the values we can zero extend in rust
+			_ => {
+				let sym1 = to_sym(op1);
+				let sym2 = to_sym(op2);
+				let sym3 = to_sym(op3);
+
+				let xsym1 = ISymbol::from(Symbol("op1".into()));
+				let xsym2 = ISymbol::from(Symbol("op2".into()));
+				let xsym3 = ISymbol::from(Symbol("op3".into()));
+
+				let body: Term = CoreOp::Ite(
+					CoreOp::Eq(smallvec![xsym3.clone().into(), bv_512_zero()]).into(),
+					bv_512_zero(),
+					BvOp::BvUrem(
+						BvOp::BvAdd(smallvec![xsym1.clone().into(), xsym2.clone().into()]).into(),
+						xsym3.clone().into(),
+					)
+					.into(),
+				)
+				.into();
+
+				let xlet: Let<Term> = Let {
+					bindings: vec![
+						(
+							xsym1,
+							BvOp::ZeroExtend(
+								[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+								sym1,
+							)
+							.into(),
+						),
+						(
+							xsym2,
+							BvOp::ZeroExtend(
+								[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+								sym2,
+							)
+							.into(),
+						),
+						(
+							xsym3,
+							BvOp::ZeroExtend(
+								[Index::Numeral(256_i32.to_biguint().unwrap()).into()],
+								sym3,
+							)
+							.into(),
+						),
+					],
+					term: body,
+				};
+
+				SymStackItem::Symbolic(
+					BvOp::Extract(
+						[
+							Index::Numeral(255_i32.to_biguint().unwrap()).into(),
+							Index::Numeral(0_i32.to_biguint().unwrap()).into(),
+						],
+						Term::Let(ILet::from(xlet)),
+					)
+					.into(),
+				)
+			}
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	},
+};
 
 fn eval_mulmod(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op3_u256_fn!(state, self::arithmetic::mulmod)
@@ -59,41 +265,44 @@ static SIGNEXTEND: OpEvals = OpEvals {
 		op2_u256_fn!(state, self::arithmetic::signextend)
 	},
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-			pop!(state, op1, op2);
+		pop!(state, op1, op2);
 
-			let ret = match (op1, op2) {
-				(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-					let xxop1 = U256::from_big_endian(&xop1[..]);
-					let xxop2 = U256::from_big_endian(&xop2[..]);
+		let ret = match (op1, op2) {
+			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+				let xxop1 = U256::from_big_endian(&xop1[..]);
+				let xxop2 = U256::from_big_endian(&xop2[..]);
 
-					let v = self::arithmetic::signextend(xxop1, xxop2);
+				let v = self::arithmetic::signextend(xxop1, xxop2);
 
-					let mut xv = H256::default();
+				let mut xv = H256::default();
 
-					v.to_big_endian(&mut xv[..]);
+				v.to_big_endian(&mut xv[..]);
 
-					SymStackItem::Concrete(xv)
-				}
+				SymStackItem::Concrete(xv)
+			}
 
-				// We are sign extending the second argument by the first argument
-				(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
-					let n = U256::from_big_endian(&xop1[..]).as_u64().to_biguint().unwrap();
-					SymStackItem::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
-				}
+			// We are sign extending the second argument by the first argument
+			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
+				let n = U256::from_big_endian(&xop1[..])
+					.as_u64()
+					.to_biguint()
+					.unwrap();
+				SymStackItem::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
+			}
 
-				(SymStackItem::Symbolic(_sym1), SymStackItem::Concrete(_xop2)) => {
-					panic!("Cannot sign extend by a symbolic value")
-				}
+			(SymStackItem::Symbolic(_sym1), SymStackItem::Concrete(_xop2)) => {
+				panic!("Cannot sign extend by a symbolic value")
+			}
 
-				(SymStackItem::Symbolic(_sym1), SymStackItem::Symbolic(_sym2)) => {
-					panic!("Cannot sign extend by a symbolic value")
-				}
-			};
+			(SymStackItem::Symbolic(_sym1), SymStackItem::Symbolic(_sym2)) => {
+				panic!("Cannot sign extend by a symbolic value")
+			}
+		};
 
-			push!(state, ret);
+		push!(state, ret);
 
-			Control::Continue(1)
-	}
+		Control::Continue(1)
+	},
 };
 
 op2_evals_bool_tuple!(LT, lt, BvOp::BvUlt);
@@ -492,7 +701,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table[Opcode::SDIV.as_usize()] = SDIV.concrete as _;
 	table[Opcode::MOD.as_usize()] = MOD.concrete as _;
 	table[Opcode::SMOD.as_usize()] = SMOD.concrete as _;
-	table[Opcode::ADDMOD.as_usize()] = eval_addmod as _;
+	table[Opcode::ADDMOD.as_usize()] = ADDMOD.concrete as _;
 	table[Opcode::MULMOD.as_usize()] = eval_mulmod as _;
 	table[Opcode::EXP.as_usize()] = eval_exp as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.concrete as _;
@@ -609,6 +818,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::SDIV.as_usize()] = SDIV.symbolic as _;
 	table[Opcode::MOD.as_usize()] = MOD.symbolic as _;
 	table[Opcode::SMOD.as_usize()] = SMOD.symbolic as _;
+	table[Opcode::ADDMOD.as_usize()] = ADDMOD.symbolic as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.symbolic as _;
 	table[Opcode::LT.as_usize()] = LT.symbolic as _;
 	table[Opcode::GT.as_usize()] = GT.symbolic as _;

@@ -93,107 +93,6 @@ macro_rules! op2_u256_tuple {
 	}};
 }
 
-macro_rules! op2_sym_tuple_helper {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:expr, $sym_arg1:ident, $sym_arg2:ident ) => {{
-		pop!($machine, op1, op2);
-
-		let ret = match (op1, op2) {
-			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-				let v = U256::from_big_endian(&xop1[..])
-					.$concrete_op(U256::from_big_endian(&xop2[..]))
-					.0;
-
-				let mut xv = H256::default();
-
-				v.to_big_endian(&mut xv[..]);
-
-				SymStackItem::Concrete(xv)
-			}
-
-			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic($sym_arg2)) => {
-				let $sym_arg1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-
-			(SymStackItem::Symbolic($sym_arg1), SymStackItem::Concrete(xop2)) => {
-				let $sym_arg2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-
-			(SymStackItem::Symbolic($sym_arg1), SymStackItem::Symbolic($sym_arg2)) => {
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-		};
-
-		push!($machine, ret);
-
-		Control::Continue(1)
-	}};
-}
-
-macro_rules! op2_sym_fn_helper {
-	( $machine:expr, $concrete_op:path, $symbolic_op:expr, $arg1:ident, $arg2:ident ) => {{
-		pop!($machine, op1, op2);
-
-		let ret = match (op1, op2) {
-			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-				let v = $concrete_op(
-					U256::from_big_endian(&xop1[..]),
-					U256::from_big_endian(&xop2[..]),
-				);
-
-				let mut xv = H256::default();
-
-				v.to_big_endian(&mut xv[..]);
-
-				SymStackItem::Concrete(xv)
-			}
-
-			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic($arg2)) => {
-				let $arg1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-
-			(SymStackItem::Symbolic($arg1), SymStackItem::Concrete(xop2)) => {
-				let $arg2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-
-			(SymStackItem::Symbolic($arg1), SymStackItem::Symbolic($arg2)) => {
-				SymStackItem::Symbolic($symbolic_op.into())
-			}
-		};
-
-		push!($machine, ret);
-
-		Control::Continue(1)
-	}};
-}
-
-macro_rules! op2_sym_tuple_vec {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:path) => {{
-		op2_sym_tuple_helper!(
-			$machine,
-			$concrete_op,
-			$symbolic_op(smallvec![sym_arg1, sym_arg2]),
-			sym_arg1,
-			sym_arg2
-		)
-	}};
-}
-
-macro_rules! op2_sym_tuple_2_args {
-	( $machine:expr, $concrete_op:ident, $symbolic_op:path) => {{
-		op2_sym_tuple_helper!(
-			$machine,
-			$concrete_op,
-			$symbolic_op(sym_arg1, sym_arg2),
-			sym_arg1,
-			sym_arg2
-		)
-	}};
-}
-
 macro_rules! op2_u256_fn {
 	( $machine:expr, $op:path ) => {{
 		pop_u256!($machine, op1, op2);
@@ -201,18 +100,6 @@ macro_rules! op2_u256_fn {
 		push_u256!($machine, ret);
 
 		Control::Continue(1)
-	}};
-}
-
-macro_rules! op2_sym_fn {
-	( $machine:expr, $concrete_op:path, $symbolic_op:path ) => {{
-		op2_sym_fn_helper!(
-			$machine,
-			$concrete_op,
-			$symbolic_op(sym_arg1, sym_arg2),
-			sym_arg1,
-			sym_arg2
-		)
 	}};
 }
 
@@ -244,50 +131,160 @@ macro_rules! as_usize_or_fail {
 	}};
 }
 
-macro_rules! op_evals_helper {
-	// These two matches are intentionally the same except for the fragment specifier on
-	// $concrete. It would be nice to have a compound fragment specifier or a "larger"
-	// specifier that subsumes both.
+macro_rules! op2_sym_eval {
+	($concrete_op:expr, $symbolic_op:expr) => {
+		|state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+			pop!(state, op1, op2);
 
-	// TODO need better arg names than xconcrete and xsymbolic
-	( $name:ident, $concrete:ident, $symbolic:path, $xconcrete: ident, $xsymbolic: ident ) => {
+			let ret = match (op1, op2) {
+				(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+					let xxop1 = U256::from_big_endian(&xop1[..]);
+					let xxop2 = U256::from_big_endian(&xop2[..]);
+
+					let v = $concrete_op(xxop1, xxop2);
+
+					let mut xv = H256::default();
+
+					v.to_big_endian(&mut xv[..]);
+
+					SymStackItem::Concrete(xv)
+				}
+
+				(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
+					let sym1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+					let v = $symbolic_op(sym1, sym2);
+					SymStackItem::Symbolic(v.into())
+				}
+
+				(SymStackItem::Symbolic(sym1), SymStackItem::Concrete(xop2)) => {
+					let sym2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+					let v = $symbolic_op(sym1, sym2);
+					SymStackItem::Symbolic(v.into())
+				}
+
+				(SymStackItem::Symbolic(sym1), SymStackItem::Symbolic(sym2)) => {
+					let v = $symbolic_op(sym1, sym2);
+					SymStackItem::Symbolic(v.into())
+				}
+			};
+
+			push!(state, ret);
+
+			Control::Continue(1)
+		}
+	};
+}
+
+macro_rules! op2_evals_tuple_vec {
+	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
 			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
-				$xconcrete!(state, $concrete)
+				op2_u256_tuple!(state, $concrete)
 			},
-			symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| {
-				$xsymbolic!(state, $concrete, $symbolic)
-			}
+			symbolic: op2_sym_eval!(
+				|op1: U256, op2: U256| { op1.$concrete(op2).0 },
+				|sym1, sym2| { $symbolic(smallvec![sym1, sym2]) }
+			),
 		};
 	};
+}
 
-	// TODO need better arg names than xconcrete and xsymbolic
-	( $name:ident, $concrete:path, $symbolic:path, $xconcrete: ident, $xsymbolic: ident ) => {
+macro_rules! op2_evals_tuple {
+	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
 			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
-				$xconcrete!(state, $concrete)
+				op2_u256_tuple!(state, $concrete)
 			},
-			symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| {
-				$xsymbolic!(state, $concrete, $symbolic)
-			}
+			symbolic: op2_sym_eval!(
+				|op1: U256, op2: U256| { op1.$concrete(op2).0 },
+				|sym1, sym2| { $symbolic(sym1, sym2) }
+			),
 		};
 	};
 }
 
-macro_rules! op_evals {
-	( $name:ident, $concrete:ident, $symbolic:path ) => {
-		op_evals_helper!($name, $concrete, $symbolic, op2_u256_tuple, op2_sym_tuple_vec );
-	}
+macro_rules! op2_evals_fn {
+	( $name:ident, $concrete:path, $symbolic:path) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				op2_u256_fn!(state, $concrete)
+			},
+			symbolic: op2_sym_eval!(
+				|op1: U256, op2: U256| { $concrete(op1, op2) },
+				|sym1, sym2| { $symbolic(sym1, sym2) }
+			),
+		};
+	};
 }
 
-macro_rules! op_evals_vec {
-	( $name:ident, $concrete:ident, $symbolic:path ) => {
-		op_evals_helper!($name, $concrete, $symbolic, op2_u256_tuple, op2_sym_tuple_2_args );
-	}
+macro_rules! op2_evals_bool_tuple {
+	( $name:ident, $concrete:ident, $symbolic:path) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				op2_u256_bool_ref!(state, $concrete)
+			},
+			symbolic: op2_sym_eval!(
+				|op1: U256, op2: U256| {
+					if op1.$concrete(&op2) {
+						U256::one()
+					} else {
+						U256::zero()
+					}
+				},
+				|sym1, sym2| {
+					CoreOp::Ite(
+						$symbolic(sym1, sym2).into(),
+						bv_constant(vec![1]),
+						bv_constant(vec![0]),
+					)
+				}
+			),
+		};
+	};
 }
 
-macro_rules! op_evals_fn {
-	( $name:ident, $concrete:path, $symbolic:path ) => {
-		op_evals_helper!($name, $concrete, $symbolic, op2_u256_fn, op2_sym_fn );
-	}
+macro_rules! op2_evals_bool_tuple_vec {
+	( $name:ident, $concrete:ident, $symbolic:path) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				op2_u256_bool_ref!(state, $concrete)
+			},
+			symbolic: op2_sym_eval!(
+				|op1: U256, op2: U256| {
+					if op1.$concrete(&op2) {
+						U256::one()
+					} else {
+						U256::zero()
+					}
+				},
+				|sym1, sym2| {
+					CoreOp::Ite(
+						$symbolic(smallvec![sym1, sym2]).into(),
+						bv_constant(vec![1]),
+						bv_constant(vec![0]),
+					)
+				}
+			),
+		};
+	};
+}
+
+macro_rules! op2_evals_bool_fn {
+	( $name:ident, $concrete:path, $symbolic:path) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+				op2_u256_fn!(state, $concrete)
+			},
+			symbolic: op2_sym_eval!(
+				$concrete,
+				|sym1, sym2| {
+					CoreOp::Ite(
+						$symbolic(sym1, sym2).into(),
+						bv_constant(vec![1]),
+						bv_constant(vec![0]),
+					)
+				}
+			),
+		};
+	};
 }

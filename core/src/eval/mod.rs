@@ -9,9 +9,8 @@ use crate::{
 	symbolic::{self, bv_256_one, bv_256_zero},
 	ExitError, ExitReason, ExitSucceed, Machine, Opcode,
 };
-use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
+use amzn_smt_ir::{logic::BvOp, CoreOp};
 use core::ops::{BitAnd, BitOr, BitXor};
-use num::bigint::ToBigUint;
 use primitive_types::{H256, U256};
 use smallvec::smallvec;
 
@@ -81,34 +80,7 @@ static SIGNEXTEND: OpEvals = OpEvals {
 		op2_u256_fn!(state, self::arithmetic::signextend)
 	},
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-		pop!(state, op1, op2);
-
-		let ret = match (op1, op2) {
-			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-				SymStackItem::Concrete(uth(self::arithmetic::signextend(htu(xop1), htu(xop2))))
-			}
-
-			// We are sign extending the second argument by the first argument
-			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
-				let n = U256::from_big_endian(&xop1[..])
-					.as_u64()
-					.to_biguint()
-					.unwrap();
-				SymStackItem::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
-			}
-
-			(SymStackItem::Symbolic(_sym1), SymStackItem::Concrete(_xop2)) => {
-				panic!("Cannot sign extend by a symbolic value")
-			}
-
-			(SymStackItem::Symbolic(_sym1), SymStackItem::Symbolic(_sym2)) => {
-				panic!("Cannot sign extend by a symbolic value")
-			}
-		};
-
-		push!(state, ret);
-
-		Control::Continue(1)
+		self::arithmetic::sym::signextend(state)
 	},
 };
 
@@ -123,26 +95,7 @@ static ISZERO: OpEvals = OpEvals {
 		op1_u256_fn!(state, self::bitwise::iszero)
 	},
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-		pop!(state, op);
-
-		let ret = match op {
-			SymStackItem::Concrete(xop) => {
-				SymStackItem::Concrete(uth(self::bitwise::iszero(htu(xop))))
-			}
-
-			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(
-				CoreOp::Ite(
-					CoreOp::Eq(smallvec![xop, bv_256_zero()]).into(),
-					bv_256_one(),
-					bv_256_zero(),
-				)
-				.into(),
-			),
-		};
-
-		push!(state, ret);
-
-		Control::Continue(1)
+		self::bitwise::sym::iszero(state)
 	},
 };
 
@@ -155,19 +108,7 @@ static NOT: OpEvals = OpEvals {
 		op1_u256_fn!(state, self::bitwise::not)
 	},
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-		pop!(state, op);
-
-		let ret = match op {
-			SymStackItem::Concrete(xop) => {
-				SymStackItem::Concrete(uth(self::bitwise::not(htu(xop))))
-			}
-
-			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(BvOp::BvNot(xop).into()),
-		};
-
-		push!(state, ret);
-
-		Control::Continue(1)
+		self::bitwise::sym::not(state)
 	},
 };
 

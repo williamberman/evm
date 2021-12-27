@@ -132,6 +132,37 @@ pub mod sym {
 	use primitive_types::{H256, H512, U256, U512};
 	use smallvec::{smallvec, SmallVec};
 
+	pub fn signextend(state: &mut Machine<SymStackItem>) -> Control {
+		pop!(state, op1, op2);
+
+		let ret = match (op1, op2) {
+			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
+				SymStackItem::Concrete(uth(super::signextend(htu(xop1), htu(xop2))))
+			}
+
+			// We are sign extending the second argument by the first argument
+			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
+				let n = U256::from_big_endian(&xop1[..])
+					.as_u64()
+					.to_biguint()
+					.unwrap();
+				SymStackItem::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
+			}
+
+			(SymStackItem::Symbolic(_sym1), SymStackItem::Concrete(_xop2)) => {
+				panic!("Cannot sign extend by a symbolic value")
+			}
+
+			(SymStackItem::Symbolic(_sym1), SymStackItem::Symbolic(_sym2)) => {
+				panic!("Cannot sign extend by a symbolic value")
+			}
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	}
+
 	pub fn addmod(state: &mut Machine<SymStackItem>) -> Control {
 		modop(state, super::addmod, |a, b| a + b, BvOp::BvAdd)
 	}
@@ -140,7 +171,7 @@ pub mod sym {
 		modop(state, super::mulmod, |a, b| a * b, BvOp::BvMul)
 	}
 
-	pub fn modop(
+	fn modop(
 		state: &mut Machine<SymStackItem>,
 		all_concrete_f: fn(U256, U256, U256) -> U256,
 		init_op_concrete_f: fn(U512, U512) -> U512,

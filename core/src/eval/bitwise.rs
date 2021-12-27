@@ -102,3 +102,50 @@ pub fn sar(shift: U256, value: U256) -> U256 {
 		}
 	}
 }
+
+pub mod sym {
+    use amzn_smt_ir::{logic::BvOp, CoreOp};
+
+    use crate::{Machine, SymStackItem, eval::{uth, htu, Control}, symbolic::{bv_256_zero, bv_256_one}};
+
+	use smallvec::smallvec;
+
+	pub fn iszero(state: &mut Machine<SymStackItem>) -> Control {
+		pop!(state, op);
+
+		let ret = match op {
+			SymStackItem::Concrete(xop) => {
+				SymStackItem::Concrete(uth(super::iszero(htu(xop))))
+			}
+
+			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(
+				CoreOp::Ite(
+					CoreOp::Eq(smallvec![xop, bv_256_zero()]).into(),
+					bv_256_one(),
+					bv_256_zero(),
+				)
+				.into(),
+			),
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	}
+
+	pub fn not(state: &mut Machine<SymStackItem>) -> Control {
+		pop!(state, op);
+
+		let ret = match op {
+			SymStackItem::Concrete(xop) => {
+				SymStackItem::Concrete(uth(super::not(htu(xop))))
+			}
+
+			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(BvOp::BvNot(xop).into()),
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	}
+}

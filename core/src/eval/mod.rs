@@ -120,13 +120,23 @@ op2_evals_fn!(SHL, self::bitwise::shl, BvOp::BvShl);
 op2_evals_fn!(SHR, self::bitwise::shr, BvOp::BvLshr);
 op2_evals_fn!(SAR, self::bitwise::sar, BvOp::BvAshr);
 
-fn eval_codesize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::codesize(state)
-}
+static CODESIZE: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::codesize(state)
+	},
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::codesize(state)
+	},
+};
 
-fn eval_codecopy(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::codecopy(state)
-}
+static CODECOPY: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::codecopy(state)
+	},
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::codecopy(state)
+	},
+};
 
 fn eval_calldataload(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldataload(state)
@@ -492,8 +502,8 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table[Opcode::SHL.as_usize()] = SHL.concrete as _;
 	table[Opcode::SHR.as_usize()] = SHR.concrete as _;
 	table[Opcode::SAR.as_usize()] = SAR.concrete as _;
-	table[Opcode::CODESIZE.as_usize()] = eval_codesize as _;
-	table[Opcode::CODECOPY.as_usize()] = eval_codecopy as _;
+	table[Opcode::CODESIZE.as_usize()] = CODESIZE.concrete as _;
+	table[Opcode::CODECOPY.as_usize()] = CODECOPY.concrete as _;
 	table[Opcode::CALLDATALOAD.as_usize()] = eval_calldataload as _;
 	table[Opcode::CALLDATASIZE.as_usize()] = eval_calldatasize as _;
 	table[Opcode::CALLDATACOPY.as_usize()] = eval_calldatacopy as _;
@@ -607,6 +617,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::SHL.as_usize()] = SHL.symbolic as _;
 	table[Opcode::SHR.as_usize()] = SHR.symbolic as _;
 	table[Opcode::SAR.as_usize()] = SAR.symbolic as _;
+	table[Opcode::CODESIZE.as_usize()] = CODESIZE.symbolic as _;
+	table[Opcode::CODECOPY.as_usize()] = CODECOPY.symbolic as _;
 
 	table
 };

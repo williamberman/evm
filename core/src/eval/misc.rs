@@ -208,3 +208,41 @@ pub fn revert(state: &mut Machine<H256>) -> Control {
 	state.return_range = start..(start + len);
 	Control::Exit(ExitRevert::Reverted.into())
 }
+
+pub mod sym {
+	use primitive_types::U256;
+
+	use crate::{
+		eval::{uth, Control, htu},
+		Machine, SymStackItem,
+	};
+
+	pub fn codesize(state: &mut Machine<SymStackItem>) -> Control {
+		let size = SymStackItem::Concrete(uth(U256::from(state.code.len())));
+		push!(state, size);
+		Control::Continue(1)
+	}
+
+	pub fn codecopy(state: &mut Machine<SymStackItem>) -> Control {
+		pop!(state, memory_offset, code_offset, len);
+
+		let (memory_offset, code_offset, len) = match (memory_offset, code_offset, len) {
+			(
+				SymStackItem::Concrete(x),
+				SymStackItem::Concrete(y),
+				SymStackItem::Concrete(z),
+			) => (htu(x), htu(y), htu(z)),
+
+			_ => panic!("cannot use symbolic args for CODECOPY")
+		};
+
+		try_or_fail!(state.memory.resize_offset(memory_offset, len));
+		match state
+			.memory
+			.copy_large(memory_offset, code_offset, len, &state.code)
+		{
+			Ok(()) => Control::Continue(1),
+			Err(e) => Control::Exit(e.into()),
+		}
+	}
+}

@@ -37,6 +37,14 @@ pub fn bv_256_zero() -> Term<ALL> {
     bv_constant(x.to_vec())
 }
 
+pub fn bv_256_one() -> Term<ALL> {
+    let x: [u8; 64] = [
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
+    ];
+
+    bv_constant(x.to_vec())
+}
+
 #[allow(dead_code)]
 // TODO make generic
 fn script(variables: &[(Term<ALL>, ISort)], assertions: &[Term<ALL>]) -> Script<Term<ALL>> {

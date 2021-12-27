@@ -125,7 +125,7 @@ pub mod sym {
 	use super::Control;
 	use crate::{
 		symbolic::{bv_256_zero, bv_constant},
-		Machine, SymStackItem,
+		Machine, SymStackItem, eval::{htu, uth},
 	};
 	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
 	use num::bigint::ToBigUint;
@@ -320,16 +320,6 @@ pub mod sym {
 			.into(),
 		)
 		.into()
-	}
-
-	fn htu(h: H256) -> U256 {
-		U256::from_big_endian(&h[..])
-	}
-
-	fn uth(u: U256) -> H256 {
-		let mut rv = H256::default();
-		u.to_big_endian(&mut rv[..]);
-		rv
 	}
 
 	fn uth512<T: Into<U512>>(u: T) -> H512 {

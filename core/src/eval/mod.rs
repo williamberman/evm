@@ -6,13 +6,10 @@ mod misc;
 
 use crate::{
 	stack::{StackItem, SymStackItem},
-	symbolic::{self, bv_constant},
+	symbolic::{self, bv_256_one, bv_256_zero},
 	ExitError, ExitReason, ExitSucceed, Machine, Opcode,
 };
-use amzn_smt_ir::{
-	logic::{BvOp},
-	CoreOp, Index,
-};
+use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
 use core::ops::{BitAnd, BitOr, BitXor};
 use num::bigint::ToBigUint;
 use primitive_types::{H256, U256};
@@ -33,6 +30,16 @@ struct OpEvals {
 	symbolic: OpEval<SymStackItem>,
 }
 
+fn htu(h: H256) -> U256 {
+	U256::from_big_endian(&h[..])
+}
+
+fn uth(u: U256) -> H256 {
+	let mut rv = H256::default();
+	u.to_big_endian(&mut rv[..]);
+	rv
+}
+
 fn eval_stop<T: StackItem>(_state: &mut Machine<T>, _opcode: Opcode, _position: usize) -> Control {
 	Control::Exit(ExitSucceed::Stopped.into())
 }
@@ -51,7 +58,7 @@ static ADDMOD: OpEvals = OpEvals {
 	},
 
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-		arithmetic::sym::addmod(state)
+		self::arithmetic::sym::addmod(state)
 	},
 };
 
@@ -61,7 +68,7 @@ static MULMOD: OpEvals = OpEvals {
 	},
 
 	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
-		arithmetic::sym::mulmod(state)
+		self::arithmetic::sym::mulmod(state)
 	},
 };
 
@@ -78,16 +85,7 @@ static SIGNEXTEND: OpEvals = OpEvals {
 
 		let ret = match (op1, op2) {
 			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-				let xxop1 = U256::from_big_endian(&xop1[..]);
-				let xxop2 = U256::from_big_endian(&xop2[..]);
-
-				let v = self::arithmetic::signextend(xxop1, xxop2);
-
-				let mut xv = H256::default();
-
-				v.to_big_endian(&mut xv[..]);
-
-				SymStackItem::Concrete(xv)
+				SymStackItem::Concrete(uth(self::arithmetic::signextend(htu(xop1), htu(xop2))))
 			}
 
 			// We are sign extending the second argument by the first argument
@@ -120,41 +118,66 @@ op2_evals_bool_fn!(SLT, self::bitwise::slt, BvOp::BvSlt);
 op2_evals_bool_fn!(SGT, self::bitwise::sgt, BvOp::BvSgt);
 op2_evals_bool_tuple_vec!(EQ, eq, CoreOp::Eq);
 
-fn eval_iszero(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op1_u256_fn!(state, self::bitwise::iszero)
-}
+static ISZERO: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		op1_u256_fn!(state, self::bitwise::iszero)
+	},
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		pop!(state, op);
 
-fn eval_and(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256!(state, bitand)
-}
+		let ret = match op {
+			SymStackItem::Concrete(xop) => {
+				SymStackItem::Concrete(uth(self::bitwise::iszero(htu(xop))))
+			}
 
-fn eval_or(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256!(state, bitor)
-}
+			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(
+				CoreOp::Ite(
+					CoreOp::Eq(smallvec![xop, bv_256_zero()]).into(),
+					bv_256_one(),
+					bv_256_zero(),
+				)
+				.into(),
+			),
+		};
 
-fn eval_xor(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256!(state, bitxor)
-}
+		push!(state, ret);
 
-fn eval_not(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op1_u256_fn!(state, self::bitwise::not)
-}
+		Control::Continue(1)
+	},
+};
+
+op2_evals_x_vec!(AND, bitand, BvOp::BvAnd);
+op2_evals_x_vec!(OR, bitor, BvOp::BvOr);
+op2_evals_x_vec!(XOR, bitxor, BvOp::BvXor);
+
+static NOT: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		op1_u256_fn!(state, self::bitwise::not)
+	},
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		pop!(state, op);
+
+		let ret = match op {
+			SymStackItem::Concrete(xop) => {
+				SymStackItem::Concrete(uth(self::bitwise::not(htu(xop))))
+			}
+
+			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(BvOp::BvNot(xop).into()),
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	},
+};
 
 fn eval_byte(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::bitwise::byte)
 }
 
-fn eval_shl(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::bitwise::shl)
-}
-
-fn eval_shr(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::bitwise::shr)
-}
-
-fn eval_sar(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::bitwise::sar)
-}
+op2_evals_fn!(SHL, self::bitwise::shl, BvOp::BvShl);
+op2_evals_fn!(SHR, self::bitwise::shr, BvOp::BvLshr);
+op2_evals_fn!(SAR, self::bitwise::sar, BvOp::BvAshr);
 
 fn eval_codesize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::codesize(state)
@@ -519,15 +542,15 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table[Opcode::SLT.as_usize()] = SLT.concrete as _;
 	table[Opcode::SGT.as_usize()] = SGT.concrete as _;
 	table[Opcode::EQ.as_usize()] = EQ.concrete as _;
-	table[Opcode::ISZERO.as_usize()] = eval_iszero as _;
-	table[Opcode::AND.as_usize()] = eval_and as _;
-	table[Opcode::OR.as_usize()] = eval_or as _;
-	table[Opcode::XOR.as_usize()] = eval_xor as _;
-	table[Opcode::NOT.as_usize()] = eval_not as _;
+	table[Opcode::ISZERO.as_usize()] = ISZERO.concrete as _;
+	table[Opcode::AND.as_usize()] = AND.concrete as _;
+	table[Opcode::OR.as_usize()] = OR.concrete as _;
+	table[Opcode::XOR.as_usize()] = XOR.concrete as _;
+	table[Opcode::NOT.as_usize()] = NOT.concrete as _;
 	table[Opcode::BYTE.as_usize()] = eval_byte as _;
-	table[Opcode::SHL.as_usize()] = eval_shl as _;
-	table[Opcode::SHR.as_usize()] = eval_shr as _;
-	table[Opcode::SAR.as_usize()] = eval_sar as _;
+	table[Opcode::SHL.as_usize()] = SHL.concrete as _;
+	table[Opcode::SHR.as_usize()] = SHR.concrete as _;
+	table[Opcode::SAR.as_usize()] = SAR.concrete as _;
 	table[Opcode::CODESIZE.as_usize()] = eval_codesize as _;
 	table[Opcode::CODECOPY.as_usize()] = eval_codecopy as _;
 	table[Opcode::CALLDATALOAD.as_usize()] = eval_calldataload as _;
@@ -635,6 +658,14 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::SLT.as_usize()] = SLT.symbolic as _;
 	table[Opcode::SGT.as_usize()] = SGT.symbolic as _;
 	table[Opcode::EQ.as_usize()] = EQ.symbolic as _;
+	table[Opcode::ISZERO.as_usize()] = ISZERO.symbolic as _;
+	table[Opcode::AND.as_usize()] = AND.symbolic as _;
+	table[Opcode::OR.as_usize()] = OR.symbolic as _;
+	table[Opcode::XOR.as_usize()] = XOR.symbolic as _;
+	table[Opcode::NOT.as_usize()] = NOT.symbolic as _;
+	table[Opcode::SHL.as_usize()] = SHL.symbolic as _;
+	table[Opcode::SHR.as_usize()] = SHR.symbolic as _;
+	table[Opcode::SAR.as_usize()] = SAR.symbolic as _;
 
 	table
 };

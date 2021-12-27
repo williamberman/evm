@@ -50,14 +50,20 @@ static ADDMOD: OpEvals = OpEvals {
 		op3_u256_fn!(state, self::arithmetic::addmod)
 	},
 
-	symbolic: |state: &mut Machine<SymStackItem>, opcode: Opcode, position: usize| -> Control {
-		arithmetic::sym::addmod(state, opcode, position)
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		arithmetic::sym::addmod(state)
 	},
 };
 
-fn eval_mulmod(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	op3_u256_fn!(state, self::arithmetic::mulmod)
-}
+static MULMOD: OpEvals = OpEvals {
+	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+		op3_u256_fn!(state, self::arithmetic::mulmod)
+	},
+
+	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		arithmetic::sym::mulmod(state)
+	},
+};
 
 fn eval_exp(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::arithmetic::exp)
@@ -505,7 +511,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table[Opcode::MOD.as_usize()] = MOD.concrete as _;
 	table[Opcode::SMOD.as_usize()] = SMOD.concrete as _;
 	table[Opcode::ADDMOD.as_usize()] = ADDMOD.concrete as _;
-	table[Opcode::MULMOD.as_usize()] = eval_mulmod as _;
+	table[Opcode::MULMOD.as_usize()] = MULMOD.concrete as _;
 	table[Opcode::EXP.as_usize()] = eval_exp as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.concrete as _;
 	table[Opcode::LT.as_usize()] = LT.concrete as _;
@@ -622,6 +628,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::MOD.as_usize()] = MOD.symbolic as _;
 	table[Opcode::SMOD.as_usize()] = SMOD.symbolic as _;
 	table[Opcode::ADDMOD.as_usize()] = ADDMOD.symbolic as _;
+	table[Opcode::MULMOD.as_usize()] = MULMOD.symbolic as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.symbolic as _;
 	table[Opcode::LT.as_usize()] = LT.symbolic as _;
 	table[Opcode::GT.as_usize()] = GT.symbolic as _;

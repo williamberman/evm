@@ -125,20 +125,33 @@ pub mod sym {
 	use super::Control;
 	use crate::{
 		symbolic::{bv_256_zero, bv_constant},
-		Machine, Opcode, SymStackItem,
+		Machine, SymStackItem,
 	};
 	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
 	use num::bigint::ToBigUint;
 	use primitive_types::{H256, H512, U256, U512};
-	use smallvec::smallvec;
+	use smallvec::{smallvec, SmallVec};
 
-	pub fn addmod(state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize) -> Control {
+	pub fn addmod(state: &mut Machine<SymStackItem>) -> Control {
+		modop(state, super::addmod, |a, b| a + b, BvOp::BvAdd)
+	}
+
+	pub fn mulmod(state: &mut Machine<SymStackItem>) -> Control {
+		modop(state, super::mulmod, |a, b| a * b, BvOp::BvMul)
+	}
+
+	pub fn modop(
+		state: &mut Machine<SymStackItem>,
+		all_concrete_f: fn(U256, U256, U256) -> U256,
+		init_op_concrete_f: fn(U512, U512) -> U512,
+		bv_op_constructor: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
+	) -> Control {
 		pop!(state, op1, op2, op3);
 
-		let ret = all_concrete(op1.clone(), op2.clone(), op3.clone())
-			.or_else(|| init_op_concrete(op1.clone(), op2.clone(), op3.clone()))
-			.or_else(|| mod_op_concrete(op1.clone(), op2.clone(), op3.clone()))
-			.or_else(|| mod_op(op1.clone(), op2.clone(), op3.clone()))
+		let ret = all_concrete(op1.clone(), op2.clone(), op3.clone(), all_concrete_f)
+			.or_else(|| init_op_concrete(op1.clone(), op2.clone(), op3.clone(), init_op_concrete_f))
+			.or_else(|| mod_op_concrete(op1.clone(), op2.clone(), op3.clone(), bv_op_constructor))
+			.or_else(|| mod_op(op1.clone(), op2.clone(), op3.clone(), bv_op_constructor))
 			.unwrap();
 
 		push!(state, ret);
@@ -150,6 +163,7 @@ pub mod sym {
 		op1: SymStackItem,
 		op2: SymStackItem,
 		op3: SymStackItem,
+		f: fn(U256, U256, U256) -> U256,
 	) -> Option<SymStackItem> {
 		match (op1, op2, op3) {
 			// We can perform everything concretely
@@ -157,7 +171,7 @@ pub mod sym {
 				SymStackItem::Concrete(op1),
 				SymStackItem::Concrete(op2),
 				SymStackItem::Concrete(op3),
-			) => SymStackItem::Concrete(uth(super::addmod(htu(op1), htu(op2), htu(op3)))).into(),
+			) => SymStackItem::Concrete(uth(f(htu(op1), htu(op2), htu(op3)))).into(),
 			_ => None,
 		}
 	}
@@ -165,21 +179,24 @@ pub mod sym {
 	// Both of the non-modulus args are concrete
 	// We can concretely
 	// - perform the initial (non-modulus) operation
-	fn init_op_concrete(op1: SymStackItem, op2: SymStackItem, op3: SymStackItem) -> Option<SymStackItem> {
-		let (op1, op2, sym3): (U512, U512, Term) = match(op1, op2, op3) {
+	fn init_op_concrete(
+		op1: SymStackItem,
+		op2: SymStackItem,
+		op3: SymStackItem,
+		f: fn(U512, U512) -> U512,
+	) -> Option<SymStackItem> {
+		let (op1, op2, sym3): (U512, U512, Term) = match (op1, op2, op3) {
 			(
 				SymStackItem::Concrete(xop1),
 				SymStackItem::Concrete(xop2),
 				SymStackItem::Symbolic(sym3),
-			) => {
-				(
-					htu(xop1).into(),
-					htu(xop2).into(),
-					symbolic_zero_extend(sym3)
-				)
-			},
+			) => (
+				htu(xop1).into(),
+				htu(xop2).into(),
+				symbolic_zero_extend(sym3),
+			),
 
-			_ => return None
+			_ => return None,
 		};
 
 		SymStackItem::Symbolic(
@@ -188,13 +205,12 @@ pub mod sym {
 				CoreOp::Eq(smallvec![sym3.clone().into(), bv_256_zero()]).into(),
 				bv_256_zero(),
 				symbolic_truncate(
-					BvOp::BvUrem(
-						bv_constant(uth512(op1 + op2).as_bytes().to_vec()),
-						sym3
-					).into()
-				)
-			).into()
-		).into()
+					BvOp::BvUrem(bv_constant(uth512(f(op1, op2)).as_bytes().to_vec()), sym3).into(),
+				),
+			)
+			.into(),
+		)
+		.into()
 	}
 
 	// The modulus and 0 or more of the other terms are concrete
@@ -206,6 +222,7 @@ pub mod sym {
 		op1: SymStackItem,
 		op2: SymStackItem,
 		op3: SymStackItem,
+		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
 	) -> Option<SymStackItem> {
 		let (sym1, sym2, op3) = match (op1, op2, op3) {
 			(
@@ -236,7 +253,7 @@ pub mod sym {
 
 		SymStackItem::Symbolic(symbolic_truncate(
 			BvOp::BvUrem(
-				BvOp::BvAdd(smallvec![sym1.into(), sym2.into()]).into(),
+				f(smallvec![sym1.into(), sym2.into()]).into(),
 				// Concretely zero extended
 				concrete_zero_extend(op3),
 			)
@@ -246,7 +263,12 @@ pub mod sym {
 	}
 
 	// No operation besides zero extention can be done concretely
-	fn mod_op(op1: SymStackItem, op2: SymStackItem, op3: SymStackItem) -> Option<SymStackItem> {
+	fn mod_op(
+		op1: SymStackItem,
+		op2: SymStackItem,
+		op3: SymStackItem,
+		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
+	) -> Option<SymStackItem> {
 		let (sym1, sym2, sym3) = match (op1, op2, op3) {
 			(
 				SymStackItem::Symbolic(sym1),
@@ -289,7 +311,7 @@ pub mod sym {
 				symbolic_truncate(
 					BvOp::BvUrem(
 						// Perform the arithmetic operation
-						BvOp::BvAdd(smallvec![sym1, sym2]).into(),
+						f(smallvec![sym1, sym2]).into(),
 						sym3,
 					)
 					.into(),

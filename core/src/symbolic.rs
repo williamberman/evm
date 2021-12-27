@@ -18,10 +18,20 @@ pub fn bv_constant(x: Hexadecimal) -> Term<ALL> {
     return Term::Constant(IConst::from(Constant::Hexadecimal(x)));
 }
 
-// TODO probably more efficient way to do this.
+#[allow(dead_code)]
+// TODO probably better way to do this.
 pub fn bv_512_zero() -> Term<ALL> {
     let x: [u8; 128] = [
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    ];
+
+    bv_constant(x.to_vec())
+}
+
+// TODO probably better way to do this.
+pub fn bv_256_zero() -> Term<ALL> {
+    let x: [u8; 64] = [
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     ];
 
     bv_constant(x.to_vec())

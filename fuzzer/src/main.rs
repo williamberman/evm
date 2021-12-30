@@ -27,7 +27,7 @@ fn handle_data(sequence: &[u8]) {
 	let (code, data) = split_at_delim(sequence, vec![0xde, 0xad, 0xbe, 0xef].as_slice());
 	let stack_limit = 1024;
 	let memory_limit = 10000;
-	let mut vm = Machine::new_concrete(Rc::new(code), Rc::new(data), stack_limit, memory_limit);
+	let mut vm = Machine::new_concrete(Rc::new(code), data, stack_limit, memory_limit);
 	let res = vm.run();
 	#[cfg(not(fuzzing))]
 	{

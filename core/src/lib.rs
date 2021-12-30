@@ -3,7 +3,6 @@
 #![deny(warnings)]
 #![forbid(unsafe_code, unused_variables, unused_imports)]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![feature(trait_alias)]
 
 extern crate alloc;
 extern crate core;
@@ -14,29 +13,34 @@ mod memory;
 mod opcode;
 mod stack;
 mod symbolic;
+mod symbolic_calldata;
 mod utils;
 mod valids;
 
 pub use crate::error::{Capture, ExitError, ExitFatal, ExitReason, ExitRevert, ExitSucceed, Trap};
 pub use crate::memory::Memory;
 pub use crate::opcode::Opcode;
-pub use crate::stack::{Stack, SymStackItem};
+pub use crate::stack::Stack;
 pub use crate::valids::Valids;
 
-use crate::eval::Control;
+use crate::eval::{Control};
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use symbolic_calldata::SymbolicCalldata;
 use core::ops::Range;
 use eval::{DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
 use primitive_types::{H256, U256};
 use stack::StackItem;
 
-pub type ConcreteMachine = Machine<H256>;
+use symbolic::{SymWord};
+
+pub type ConcreteMachine = Machine<H256, Vec<u8>>;
+pub type SymbolicMachine = Machine<SymWord, SymbolicCalldata>;
 
 /// Core execution layer for EVM.
-pub struct Machine<T: StackItem> {
+pub struct Machine<IStackItem: StackItem, ICalldata> {
 	/// Program data.
-	data: Rc<Vec<u8>>,
+	data: ICalldata,
 	/// Program code.
 	code: Rc<Vec<u8>>,
 	/// Program counter.
@@ -48,15 +52,15 @@ pub struct Machine<T: StackItem> {
 	/// Memory.
 	memory: Memory,
 	/// Stack.
-	stack: Stack<T>,
+	stack: Stack<IStackItem>,
 
-	table: DispatchTable<T>,
+	table: DispatchTable<IStackItem, ICalldata>,
 }
 
-impl Machine<H256> {
+impl ConcreteMachine {
 	pub fn new_concrete(
 		code: Rc<Vec<u8>>,
-		data: Rc<Vec<u8>>,
+		data: Vec<u8>,
 		stack_limit: usize,
 		memory_limit: usize,
 	) -> Self {
@@ -64,10 +68,10 @@ impl Machine<H256> {
 	}
 }
 
-impl Machine<SymStackItem> {
+impl SymbolicMachine {
 	pub fn new_symbolic(
 		code: Rc<Vec<u8>>,
-		data: Rc<Vec<u8>>,
+		data: SymbolicCalldata,
 		stack_limit: usize,
 		memory_limit: usize,
 	) -> Self {
@@ -75,13 +79,13 @@ impl Machine<SymStackItem> {
 	}
 }
 
-impl<T: StackItem> Machine<T> {
+impl<IStackItem: StackItem, ICalldata> Machine<IStackItem, ICalldata> {
 	/// Reference of machine stack.
-	pub fn stack(&self) -> &Stack<T> {
+	pub fn stack(&self) -> &Stack<IStackItem> {
 		&self.stack
 	}
 	/// Mutable reference of machine stack.
-	pub fn stack_mut(&mut self) -> &mut Stack<T> {
+	pub fn stack_mut(&mut self) -> &mut Stack<IStackItem> {
 		&mut self.stack
 	}
 	/// Reference of machine memory.
@@ -100,10 +104,10 @@ impl<T: StackItem> Machine<T> {
 	/// Create a new machine with given code and data.
 	pub fn new(
 		code: Rc<Vec<u8>>,
-		data: Rc<Vec<u8>>,
+		data: ICalldata,
 		stack_limit: usize,
 		memory_limit: usize,
-		table: DispatchTable<T>,
+		table: DispatchTable<IStackItem, ICalldata>,
 	) -> Self {
 		let valids = Valids::new(&code[..]);
 
@@ -125,7 +129,7 @@ impl<T: StackItem> Machine<T> {
 	}
 
 	/// Inspect the machine's next opcode and current stack.
-	pub fn inspect(&self) -> Option<(Opcode, &Stack<T>)> {
+	pub fn inspect(&self) -> Option<(Opcode, &Stack<IStackItem>)> {
 		let position = match self.position {
 			Ok(position) => position,
 			Err(_) => return None,
@@ -206,7 +210,7 @@ impl<T: StackItem> Machine<T> {
 
 #[cfg(test)]
 mod tests {
-	use crate::{symbolic::bv_constant, Machine, Opcode, SymStackItem};
+	use crate::{symbolic::bv_constant_from_h256, Machine, Opcode, SymWord, SymbolicCalldata};
 	use amzn_smt_ir::{logic::BvOp, Term};
 	use primitive_types::H256;
 	use smallvec::smallvec;
@@ -218,21 +222,25 @@ mod tests {
 		let b = H256::from_low_u64_be(1);
 
 		let code: Vec<u8> = vec![Opcode::ADD.0];
-		let data: Vec<u8> = vec![];
 
 		let stack_limit = 1024;
 		let memory_limit = 10000;
 
-		let mut m = Machine::new_symbolic(Rc::new(code), Rc::new(data), stack_limit, memory_limit);
+		let mut m = Machine::new_symbolic(
+			Rc::new(code),
+			SymbolicCalldata::default(),
+			stack_limit,
+			memory_limit,
+		);
 
-		m.stack_mut().push(SymStackItem::Concrete(a)).unwrap();
-		m.stack_mut().push(SymStackItem::Concrete(b)).unwrap();
+		m.stack_mut().push(SymWord::Concrete(a)).unwrap();
+		m.stack_mut().push(SymWord::Concrete(b)).unwrap();
 
 		m.step().unwrap();
 
 		assert_eq!(
 			m.stack().peek(0).unwrap(),
-			SymStackItem::Concrete(H256::from_low_u64_be(256))
+			SymWord::Concrete(H256::from_low_u64_be(256))
 		);
 	}
 
@@ -242,25 +250,25 @@ mod tests {
 		let b = Term::Variable("b".into());
 
 		let code: Vec<u8> = vec![Opcode::ADD.0];
-		let data: Vec<u8> = vec![];
 
 		let stack_limit = 1024;
 		let memory_limit = 10000;
 
-		let mut m = Machine::new_symbolic(Rc::new(code), Rc::new(data), stack_limit, memory_limit);
+		let mut m = Machine::new_symbolic(
+			Rc::new(code),
+			SymbolicCalldata::default(),
+			stack_limit,
+			memory_limit,
+		);
 
-		m.stack_mut().push(SymStackItem::Concrete(a)).unwrap();
-		m.stack_mut()
-			.push(SymStackItem::Symbolic(b.clone()))
-			.unwrap();
+		m.stack_mut().push(SymWord::Concrete(a)).unwrap();
+		m.stack_mut().push(SymWord::Symbolic(b.clone())).unwrap();
 
 		m.step().unwrap();
 
 		assert_eq!(
 			m.stack().peek(0).unwrap(),
-			SymStackItem::Symbolic(
-				BvOp::BvAdd(smallvec![b, bv_constant(a.as_bytes().to_vec())]).into()
-			)
+			SymWord::Symbolic(BvOp::BvAdd(smallvec![b, bv_constant_from_h256(&a)]).into())
 		);
 	}
 }

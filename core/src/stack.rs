@@ -1,15 +1,8 @@
 use crate::ExitError;
 use alloc::vec::Vec;
-use amzn_smt_ir::Term;
-use primitive_types::H256;
 
-pub trait StackItem = Clone;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SymStackItem {
-	Concrete(H256),
-	Symbolic(Term)
-}
+pub trait StackItem: Clone { }
+impl<T: Clone> StackItem for T { }
 
 /// EVM stack.
 #[derive(Clone, Debug)]

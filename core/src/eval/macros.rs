@@ -133,29 +133,29 @@ macro_rules! as_usize_or_fail {
 
 macro_rules! op2_sym_eval {
 	($concrete_op:expr, $symbolic_op:expr) => {
-		|state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+		|state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 			pop!(state, op1, op2);
 
 			let ret = match (op1, op2) {
-				(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-					SymStackItem::Concrete(uth($concrete_op(htu(xop1), htu(xop2))))
+				(SymWord::Concrete(xop1), SymWord::Concrete(xop2)) => {
+					SymWord::Concrete(uth(&$concrete_op(htu(&xop1), htu(&xop2))))
 				}
 
-				(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
-					let sym1 = symbolic::bv_constant(xop1.as_bytes().to_vec());
+				(SymWord::Concrete(xop1), SymWord::Symbolic(sym2)) => {
+					let sym1 = symbolic::bv_constant_from_h256(&xop1);
 					let v = $symbolic_op(sym1, sym2);
-					SymStackItem::Symbolic(v.into())
+					SymWord::Symbolic(v.into())
 				}
 
-				(SymStackItem::Symbolic(sym1), SymStackItem::Concrete(xop2)) => {
-					let sym2 = symbolic::bv_constant(xop2.as_bytes().to_vec());
+				(SymWord::Symbolic(sym1), SymWord::Concrete(xop2)) => {
+					let sym2 = symbolic::bv_constant_from_h256(&xop2);
 					let v = $symbolic_op(sym1, sym2);
-					SymStackItem::Symbolic(v.into())
+					SymWord::Symbolic(v.into())
 				}
 
-				(SymStackItem::Symbolic(sym1), SymStackItem::Symbolic(sym2)) => {
+				(SymWord::Symbolic(sym1), SymWord::Symbolic(sym2)) => {
 					let v = $symbolic_op(sym1, sym2);
-					SymStackItem::Symbolic(v.into())
+					SymWord::Symbolic(v.into())
 				}
 			};
 
@@ -169,7 +169,7 @@ macro_rules! op2_sym_eval {
 macro_rules! op2_evals_tuple_vec {
 	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_tuple!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -183,7 +183,7 @@ macro_rules! op2_evals_tuple_vec {
 macro_rules! op2_evals_tuple {
 	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_tuple!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -197,7 +197,7 @@ macro_rules! op2_evals_tuple {
 macro_rules! op2_evals_x_vec {
 	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -211,7 +211,7 @@ macro_rules! op2_evals_x_vec {
 macro_rules! op2_evals_fn {
 	( $name:ident, $concrete:path, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_fn!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -225,7 +225,7 @@ macro_rules! op2_evals_fn {
 macro_rules! op2_evals_bool_tuple {
 	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_bool_ref!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -247,7 +247,7 @@ macro_rules! op2_evals_bool_tuple {
 macro_rules! op2_evals_bool_tuple_vec {
 	( $name:ident, $concrete:ident, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_bool_ref!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!(
@@ -273,7 +273,7 @@ macro_rules! op2_evals_bool_tuple_vec {
 macro_rules! op2_evals_bool_fn {
 	( $name:ident, $concrete:path, $symbolic:path) => {
 		static $name: OpEvals = OpEvals {
-			concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| {
 				op2_u256_fn!(state, $concrete)
 			},
 			symbolic: op2_sym_eval!($concrete, |sym1, sym2| {

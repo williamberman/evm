@@ -118,7 +118,7 @@ impl<'config> Runtime<'config> {
 	/// Create a new runtime with given code and data.
 	pub fn new(
 		code: Rc<Vec<u8>>,
-		data: Rc<Vec<u8>>,
+		data: Vec<u8>,
 		context: Context,
 		config: &'config Config,
 	) -> Self {

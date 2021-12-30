@@ -5,9 +5,10 @@ mod bitwise;
 mod misc;
 
 use crate::{
-	stack::{StackItem, SymStackItem},
-	symbolic::{self, bv_256_one, bv_256_zero},
-	ExitError, ExitReason, ExitSucceed, Machine, Opcode,
+	stack::{StackItem},
+	symbolic::{self, bv_256_one, bv_256_zero, SymWord},
+	ConcreteMachine, ExitError, ExitReason, ExitSucceed, Machine, Opcode, SymbolicCalldata,
+	SymbolicMachine,
 };
 use amzn_smt_ir::{logic::BvOp, CoreOp};
 use core::ops::{BitAnd, BitOr, BitXor};
@@ -22,24 +23,29 @@ pub enum Control {
 	Trap(Opcode),
 }
 
-type OpEval<T> = fn(state: &mut Machine<T>, opcode: Opcode, position: usize) -> Control;
+type OpEval<IStackItem, ICalldata> =
+	fn(state: &mut Machine<IStackItem, ICalldata>, opcode: Opcode, position: usize) -> Control;
 
 struct OpEvals {
-	concrete: OpEval<H256>,
-	symbolic: OpEval<SymStackItem>,
+	concrete: OpEval<H256, Vec<u8>>,
+	symbolic: OpEval<SymWord, SymbolicCalldata>,
 }
 
-fn htu(h: H256) -> U256 {
+pub fn htu(h: &H256) -> U256 {
 	U256::from_big_endian(&h[..])
 }
 
-fn uth(u: U256) -> H256 {
+pub fn uth(u: &U256) -> H256 {
 	let mut rv = H256::default();
 	u.to_big_endian(&mut rv[..]);
 	rv
 }
 
-fn eval_stop<T: StackItem>(_state: &mut Machine<T>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_stop<IStackItem: StackItem, ICalldata>(
+	_state: &mut Machine<IStackItem, ICalldata>,
+	_opcode: Opcode,
+	_position: usize,
+) -> Control {
 	Control::Exit(ExitSucceed::Stopped.into())
 }
 
@@ -52,34 +58,34 @@ op2_evals_fn!(MOD, self::arithmetic::rem, BvOp::BvUrem);
 op2_evals_fn!(SMOD, self::arithmetic::srem, BvOp::BvSrem);
 
 static ADDMOD: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		op3_u256_fn!(state, self::arithmetic::addmod)
 	},
 
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::arithmetic::sym::addmod(state)
 	},
 };
 
 static MULMOD: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		op3_u256_fn!(state, self::arithmetic::mulmod)
 	},
 
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::arithmetic::sym::mulmod(state)
 	},
 };
 
-fn eval_exp(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_exp(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::arithmetic::exp)
 }
 
 static SIGNEXTEND: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		op2_u256_fn!(state, self::arithmetic::signextend)
 	},
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::arithmetic::sym::signextend(state)
 	},
 };
@@ -91,10 +97,10 @@ op2_evals_bool_fn!(SGT, self::bitwise::sgt, BvOp::BvSgt);
 op2_evals_bool_tuple_vec!(EQ, eq, CoreOp::Eq);
 
 static ISZERO: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		op1_u256_fn!(state, self::bitwise::iszero)
 	},
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::bitwise::sym::iszero(state)
 	},
 };
@@ -104,15 +110,15 @@ op2_evals_x_vec!(OR, bitor, BvOp::BvOr);
 op2_evals_x_vec!(XOR, bitxor, BvOp::BvXor);
 
 static NOT: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		op1_u256_fn!(state, self::bitwise::not)
 	},
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::bitwise::sym::not(state)
 	},
 };
 
-fn eval_byte(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_byte(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	op2_u256_fn!(state, self::bitwise::byte)
 }
 
@@ -121,359 +127,366 @@ op2_evals_fn!(SHR, self::bitwise::shr, BvOp::BvLshr);
 op2_evals_fn!(SAR, self::bitwise::sar, BvOp::BvAshr);
 
 static CODESIZE: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::codesize(state)
 	},
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::sym::codesize(state)
 	},
 };
 
 static CODECOPY: OpEvals = OpEvals {
-	concrete: |state: &mut Machine<H256>, _opcode: Opcode, _position: usize| -> Control {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::codecopy(state)
 	},
-	symbolic: |state: &mut Machine<SymStackItem>, _opcode: Opcode, _position: usize| -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::sym::codecopy(state)
 	},
 };
 
-fn eval_calldataload(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::calldataload(state)
-}
+static CALLDATALOAD: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::calldataload(state)
+	},
 
-fn eval_calldatasize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::calldataload(state)
+	},
+};
+
+fn eval_calldatasize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldatasize(state)
 }
 
-fn eval_calldatacopy(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_calldatacopy(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::calldatacopy(state)
 }
 
-fn eval_pop(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_pop(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::pop(state)
 }
 
-fn eval_mload(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_mload(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::mload(state)
 }
 
-fn eval_mstore(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_mstore(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::mstore(state)
 }
 
-fn eval_mstore8(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_mstore8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::mstore8(state)
 }
 
-fn eval_jump(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_jump(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::jump(state)
 }
 
-fn eval_jumpi(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_jumpi(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::jumpi(state)
 }
 
-fn eval_pc(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_pc(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::pc(state, position)
 }
 
-fn eval_msize(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_msize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::msize(state)
 }
 
-fn eval_jumpdest<T: StackItem>(
-	_state: &mut Machine<T>,
+fn eval_jumpdest<IStackItem: StackItem, ICalldata>(
+	_state: &mut Machine<IStackItem, ICalldata>,
 	_opcode: Opcode,
 	_position: usize,
 ) -> Control {
 	Control::Continue(1)
 }
 
-fn eval_push1(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push1(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 1, position)
 }
 
-fn eval_push2(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push2(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 2, position)
 }
 
-fn eval_push3(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push3(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 3, position)
 }
 
-fn eval_push4(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push4(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 4, position)
 }
 
-fn eval_push5(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push5(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 5, position)
 }
 
-fn eval_push6(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push6(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 6, position)
 }
 
-fn eval_push7(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push7(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 7, position)
 }
 
-fn eval_push8(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push8(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 8, position)
 }
 
-fn eval_push9(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push9(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 9, position)
 }
 
-fn eval_push10(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push10(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 10, position)
 }
 
-fn eval_push11(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push11(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 11, position)
 }
 
-fn eval_push12(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push12(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 12, position)
 }
 
-fn eval_push13(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push13(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 13, position)
 }
 
-fn eval_push14(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push14(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 14, position)
 }
 
-fn eval_push15(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push15(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 15, position)
 }
 
-fn eval_push16(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push16(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 16, position)
 }
 
-fn eval_push17(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push17(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 17, position)
 }
 
-fn eval_push18(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push18(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 18, position)
 }
 
-fn eval_push19(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push19(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 19, position)
 }
 
-fn eval_push20(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push20(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 20, position)
 }
 
-fn eval_push21(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push21(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 21, position)
 }
 
-fn eval_push22(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push22(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 22, position)
 }
 
-fn eval_push23(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push23(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 23, position)
 }
 
-fn eval_push24(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push24(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 24, position)
 }
 
-fn eval_push25(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push25(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 25, position)
 }
 
-fn eval_push26(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push26(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 26, position)
 }
 
-fn eval_push27(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push27(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 27, position)
 }
 
-fn eval_push28(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push28(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 28, position)
 }
 
-fn eval_push29(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push29(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 29, position)
 }
 
-fn eval_push30(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push30(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 30, position)
 }
 
-fn eval_push31(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push31(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 31, position)
 }
 
-fn eval_push32(state: &mut Machine<H256>, _opcode: Opcode, position: usize) -> Control {
+fn eval_push32(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 32, position)
 }
 
-fn eval_dup1(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup1(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 1)
 }
 
-fn eval_dup2(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup2(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 2)
 }
 
-fn eval_dup3(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup3(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 3)
 }
 
-fn eval_dup4(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup4(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 4)
 }
 
-fn eval_dup5(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup5(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 5)
 }
 
-fn eval_dup6(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup6(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 6)
 }
 
-fn eval_dup7(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup7(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 7)
 }
 
-fn eval_dup8(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 8)
 }
 
-fn eval_dup9(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup9(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 9)
 }
 
-fn eval_dup10(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup10(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 10)
 }
 
-fn eval_dup11(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup11(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 11)
 }
 
-fn eval_dup12(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup12(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 12)
 }
 
-fn eval_dup13(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup13(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 13)
 }
 
-fn eval_dup14(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup14(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 14)
 }
 
-fn eval_dup15(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup15(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 15)
 }
 
-fn eval_dup16(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_dup16(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::dup(state, 16)
 }
 
-fn eval_swap1(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap1(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 1)
 }
 
-fn eval_swap2(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap2(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 2)
 }
 
-fn eval_swap3(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap3(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 3)
 }
 
-fn eval_swap4(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap4(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 4)
 }
 
-fn eval_swap5(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap5(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 5)
 }
 
-fn eval_swap6(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap6(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 6)
 }
 
-fn eval_swap7(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap7(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 7)
 }
 
-fn eval_swap8(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 8)
 }
 
-fn eval_swap9(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap9(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 9)
 }
 
-fn eval_swap10(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap10(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 10)
 }
 
-fn eval_swap11(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap11(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 11)
 }
 
-fn eval_swap12(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap12(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 12)
 }
 
-fn eval_swap13(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap13(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 13)
 }
 
-fn eval_swap14(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap14(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 14)
 }
 
-fn eval_swap15(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap15(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 15)
 }
 
-fn eval_swap16(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_swap16(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 16)
 }
 
-fn eval_return(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_return(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::ret(state)
 }
 
-fn eval_revert(state: &mut Machine<H256>, _opcode: Opcode, _position: usize) -> Control {
+fn eval_revert(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::revert(state)
 }
 
-fn eval_invalid<T: StackItem>(
-	_state: &mut Machine<T>,
+fn eval_invalid<IStackItem: StackItem, ICalldata>(
+	_state: &mut Machine<IStackItem, ICalldata>,
 	_opcode: Opcode,
 	_position: usize,
 ) -> Control {
 	Control::Exit(ExitError::DesignatedInvalid.into())
 }
 
-fn eval_external<T: StackItem>(
-	_state: &mut Machine<T>,
+fn eval_external<IStackItem: StackItem, ICalldata>(
+	_state: &mut Machine<IStackItem, ICalldata>,
 	opcode: Opcode,
 	_position: usize,
 ) -> Control {
 	Control::Trap(opcode)
 }
 
-pub type DispatchTable<T> =
-	[fn(state: &mut Machine<T>, opcode: Opcode, position: usize) -> Control; 256];
+pub type DispatchTable<IStackItem, ICalldata> =
+	[fn(state: &mut Machine<IStackItem, ICalldata>, opcode: Opcode, position: usize) -> Control;
+		256];
 
-pub static CONCRETE_TABLE: DispatchTable<H256> = {
+pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::STOP.as_usize()] = eval_stop as _;
@@ -504,7 +517,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table[Opcode::SAR.as_usize()] = SAR.concrete as _;
 	table[Opcode::CODESIZE.as_usize()] = CODESIZE.concrete as _;
 	table[Opcode::CODECOPY.as_usize()] = CODECOPY.concrete as _;
-	table[Opcode::CALLDATALOAD.as_usize()] = eval_calldataload as _;
+	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.concrete as _;
 	table[Opcode::CALLDATASIZE.as_usize()] = eval_calldatasize as _;
 	table[Opcode::CALLDATACOPY.as_usize()] = eval_calldatacopy as _;
 	table[Opcode::POP.as_usize()] = eval_pop as _;
@@ -591,7 +604,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256> = {
 	table
 };
 
-pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
+pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::ADD.as_usize()] = ADD.symbolic as _;
@@ -619,6 +632,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymStackItem> = {
 	table[Opcode::SAR.as_usize()] = SAR.symbolic as _;
 	table[Opcode::CODESIZE.as_usize()] = CODESIZE.symbolic as _;
 	table[Opcode::CODECOPY.as_usize()] = CODECOPY.symbolic as _;
+	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.symbolic as _;
 
 	table
 };

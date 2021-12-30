@@ -124,36 +124,36 @@ pub fn signextend(op1: U256, op2: U256) -> U256 {
 pub mod sym {
 	use super::Control;
 	use crate::{
-		symbolic::{bv_256_zero, bv_constant},
-		Machine, SymStackItem, eval::{htu, uth},
+		symbolic::{bv_256_zero, SymWord, bv_constant_from_h512},
+		eval::{htu, uth}, SymbolicMachine,
 	};
 	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
 	use num::bigint::ToBigUint;
 	use primitive_types::{H256, H512, U256, U512};
 	use smallvec::{smallvec, SmallVec};
 
-	pub fn signextend(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn signextend(state: &mut SymbolicMachine) -> Control {
 		pop!(state, op1, op2);
 
 		let ret = match (op1, op2) {
-			(SymStackItem::Concrete(xop1), SymStackItem::Concrete(xop2)) => {
-				SymStackItem::Concrete(uth(super::signextend(htu(xop1), htu(xop2))))
+			(SymWord::Concrete(xop1), SymWord::Concrete(xop2)) => {
+				SymWord::Concrete(uth(&super::signextend(htu(&xop1), htu(&xop2))))
 			}
 
 			// We are sign extending the second argument by the first argument
-			(SymStackItem::Concrete(xop1), SymStackItem::Symbolic(sym2)) => {
+			(SymWord::Concrete(xop1), SymWord::Symbolic(sym2)) => {
 				let n = U256::from_big_endian(&xop1[..])
 					.as_u64()
 					.to_biguint()
 					.unwrap();
-				SymStackItem::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
+				SymWord::Symbolic(BvOp::SignExtend([Index::Numeral(n).into()], sym2).into())
 			}
 
-			(SymStackItem::Symbolic(_sym1), SymStackItem::Concrete(_xop2)) => {
+			(SymWord::Symbolic(_sym1), SymWord::Concrete(_xop2)) => {
 				panic!("Cannot sign extend by a symbolic value")
 			}
 
-			(SymStackItem::Symbolic(_sym1), SymStackItem::Symbolic(_sym2)) => {
+			(SymWord::Symbolic(_sym1), SymWord::Symbolic(_sym2)) => {
 				panic!("Cannot sign extend by a symbolic value")
 			}
 		};
@@ -163,16 +163,16 @@ pub mod sym {
 		Control::Continue(1)
 	}
 
-	pub fn addmod(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn addmod(state: &mut SymbolicMachine) -> Control {
 		modop(state, super::addmod, |a, b| a + b, BvOp::BvAdd)
 	}
 
-	pub fn mulmod(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn mulmod(state: &mut SymbolicMachine) -> Control {
 		modop(state, super::mulmod, |a, b| a * b, BvOp::BvMul)
 	}
 
 	fn modop(
-		state: &mut Machine<SymStackItem>,
+		state: &mut SymbolicMachine,
 		all_concrete_f: fn(U256, U256, U256) -> U256,
 		init_op_concrete_f: fn(U512, U512) -> U512,
 		bv_op_constructor: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
@@ -191,18 +191,18 @@ pub mod sym {
 	}
 
 	fn all_concrete(
-		op1: SymStackItem,
-		op2: SymStackItem,
-		op3: SymStackItem,
+		op1: SymWord,
+		op2: SymWord,
+		op3: SymWord,
 		f: fn(U256, U256, U256) -> U256,
-	) -> Option<SymStackItem> {
+	) -> Option<SymWord> {
 		match (op1, op2, op3) {
 			// We can perform everything concretely
 			(
-				SymStackItem::Concrete(op1),
-				SymStackItem::Concrete(op2),
-				SymStackItem::Concrete(op3),
-			) => SymStackItem::Concrete(uth(f(htu(op1), htu(op2), htu(op3)))).into(),
+				SymWord::Concrete(op1),
+				SymWord::Concrete(op2),
+				SymWord::Concrete(op3),
+			) => SymWord::Concrete(uth(&f(htu(&op1), htu(&op2), htu(&op3)))).into(),
 			_ => None,
 		}
 	}
@@ -211,32 +211,32 @@ pub mod sym {
 	// We can concretely
 	// - perform the initial (non-modulus) operation
 	fn init_op_concrete(
-		op1: SymStackItem,
-		op2: SymStackItem,
-		op3: SymStackItem,
+		op1: SymWord,
+		op2: SymWord,
+		op3: SymWord,
 		f: fn(U512, U512) -> U512,
-	) -> Option<SymStackItem> {
+	) -> Option<SymWord> {
 		let (op1, op2, sym3): (U512, U512, Term) = match (op1, op2, op3) {
 			(
-				SymStackItem::Concrete(xop1),
-				SymStackItem::Concrete(xop2),
-				SymStackItem::Symbolic(sym3),
+				SymWord::Concrete(xop1),
+				SymWord::Concrete(xop2),
+				SymWord::Symbolic(sym3),
 			) => (
-				htu(xop1).into(),
-				htu(xop2).into(),
+				htu(&xop1).into(),
+				htu(&xop2).into(),
 				symbolic_zero_extend(sym3),
 			),
 
 			_ => return None,
 		};
 
-		SymStackItem::Symbolic(
+		SymWord::Symbolic(
 			CoreOp::Ite(
 				// Check on the modulus
 				CoreOp::Eq(smallvec![sym3.clone().into(), bv_256_zero()]).into(),
 				bv_256_zero(),
 				symbolic_truncate(
-					BvOp::BvUrem(bv_constant(uth512(f(op1, op2)).as_bytes().to_vec()), sym3).into(),
+					BvOp::BvUrem(bv_constant_from_h512(&uth512(f(op1, op2))), sym3).into(),
 				),
 			)
 			.into(),
@@ -250,28 +250,28 @@ pub mod sym {
 	// - zero extend the modulus
 	// - zero extend those other arguments which are concrete
 	fn mod_op_concrete(
-		op1: SymStackItem,
-		op2: SymStackItem,
-		op3: SymStackItem,
+		op1: SymWord,
+		op2: SymWord,
+		op3: SymWord,
 		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
-	) -> Option<SymStackItem> {
+	) -> Option<SymWord> {
 		let (sym1, sym2, op3) = match (op1, op2, op3) {
 			(
-				SymStackItem::Symbolic(sym1),
-				SymStackItem::Symbolic(sym2),
-				SymStackItem::Concrete(xop3),
+				SymWord::Symbolic(sym1),
+				SymWord::Symbolic(sym2),
+				SymWord::Concrete(xop3),
 			) => (symbolic_zero_extend(sym1), symbolic_zero_extend(sym2), xop3),
 
 			(
-				SymStackItem::Concrete(xop1),
-				SymStackItem::Symbolic(sym2),
-				SymStackItem::Concrete(xop3),
+				SymWord::Concrete(xop1),
+				SymWord::Symbolic(sym2),
+				SymWord::Concrete(xop3),
 			) => (concrete_zero_extend(xop1), symbolic_zero_extend(sym2), xop3),
 
 			(
-				SymStackItem::Symbolic(sym1),
-				SymStackItem::Concrete(xop2),
-				SymStackItem::Concrete(xop3),
+				SymWord::Symbolic(sym1),
+				SymWord::Concrete(xop2),
+				SymWord::Concrete(xop3),
 			) => (symbolic_zero_extend(sym1), concrete_zero_extend(xop2), xop3),
 
 			_ => return None,
@@ -279,10 +279,10 @@ pub mod sym {
 
 		// Concrete check if modulus is 0
 		if op3 == H256::zero() {
-			return SymStackItem::Concrete(H256::zero()).into();
+			return SymWord::Concrete(H256::zero()).into();
 		}
 
-		SymStackItem::Symbolic(symbolic_truncate(
+		SymWord::Symbolic(symbolic_truncate(
 			BvOp::BvUrem(
 				f(smallvec![sym1.into(), sym2.into()]).into(),
 				// Concretely zero extended
@@ -295,16 +295,16 @@ pub mod sym {
 
 	// No operation besides zero extention can be done concretely
 	fn mod_op(
-		op1: SymStackItem,
-		op2: SymStackItem,
-		op3: SymStackItem,
+		op1: SymWord,
+		op2: SymWord,
+		op3: SymWord,
 		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
-	) -> Option<SymStackItem> {
+	) -> Option<SymWord> {
 		let (sym1, sym2, sym3) = match (op1, op2, op3) {
 			(
-				SymStackItem::Symbolic(sym1),
-				SymStackItem::Symbolic(sym2),
-				SymStackItem::Symbolic(sym3),
+				SymWord::Symbolic(sym1),
+				SymWord::Symbolic(sym2),
+				SymWord::Symbolic(sym3),
 			) => (
 				symbolic_zero_extend(sym1),
 				symbolic_zero_extend(sym2),
@@ -312,9 +312,9 @@ pub mod sym {
 			),
 
 			(
-				SymStackItem::Concrete(xop1),
-				SymStackItem::Symbolic(sym2),
-				SymStackItem::Symbolic(sym3),
+				SymWord::Concrete(xop1),
+				SymWord::Symbolic(sym2),
+				SymWord::Symbolic(sym3),
 			) => (
 				concrete_zero_extend(xop1),
 				symbolic_zero_extend(sym2),
@@ -322,9 +322,9 @@ pub mod sym {
 			),
 
 			(
-				SymStackItem::Symbolic(sym1),
-				SymStackItem::Concrete(xop2),
-				SymStackItem::Symbolic(sym3),
+				SymWord::Symbolic(sym1),
+				SymWord::Concrete(xop2),
+				SymWord::Symbolic(sym3),
 			) => (
 				symbolic_zero_extend(sym1),
 				concrete_zero_extend(xop2),
@@ -334,7 +334,7 @@ pub mod sym {
 			_ => return None,
 		};
 
-		SymStackItem::Symbolic(
+		SymWord::Symbolic(
 			CoreOp::Ite(
 				// Check on the modulus
 				CoreOp::Eq(smallvec![sym3.clone().into(), bv_256_zero()]).into(),
@@ -371,7 +371,7 @@ pub mod sym {
 	// Zero extend the concrete value and return it as a
 	// (constant) symbolic BitVec(512)
 	fn concrete_zero_extend(op: H256) -> Term {
-		bv_constant(uth512(htu(op)).as_bytes().to_vec())
+		bv_constant_from_h512(&uth512(htu(&op)))
 	}
 
 	// BitVec(512) -> BitVec(256)

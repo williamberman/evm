@@ -1,17 +1,17 @@
 use super::Control;
-use crate::{ExitError, ExitFatal, ExitRevert, ExitSucceed, Machine};
+use crate::{ExitError, ExitFatal, ExitRevert, ExitSucceed, ConcreteMachine};
 use core::cmp::min;
 use primitive_types::{H256, U256};
 
 #[inline]
-pub fn codesize(state: &mut Machine<H256>) -> Control {
+pub fn codesize(state: &mut ConcreteMachine) -> Control {
 	let size = U256::from(state.code.len());
 	push_u256!(state, size);
 	Control::Continue(1)
 }
 
 #[inline]
-pub fn codecopy(state: &mut Machine<H256>) -> Control {
+pub fn codecopy(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, memory_offset, code_offset, len);
 
 	try_or_fail!(state.memory.resize_offset(memory_offset, len));
@@ -25,7 +25,7 @@ pub fn codecopy(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn calldataload(state: &mut Machine<H256>) -> Control {
+pub fn calldataload(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, index);
 
 	let mut load = [0u8; 32];
@@ -46,14 +46,14 @@ pub fn calldataload(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn calldatasize(state: &mut Machine<H256>) -> Control {
+pub fn calldatasize(state: &mut ConcreteMachine) -> Control {
 	let len = U256::from(state.data.len());
 	push_u256!(state, len);
 	Control::Continue(1)
 }
 
 #[inline]
-pub fn calldatacopy(state: &mut Machine<H256>) -> Control {
+pub fn calldatacopy(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, memory_offset, data_offset, len);
 
 	try_or_fail!(state.memory.resize_offset(memory_offset, len));
@@ -71,13 +71,13 @@ pub fn calldatacopy(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn pop(state: &mut Machine<H256>) -> Control {
+pub fn pop(state: &mut ConcreteMachine) -> Control {
 	pop!(state, _val);
 	Control::Continue(1)
 }
 
 #[inline]
-pub fn mload(state: &mut Machine<H256>) -> Control {
+pub fn mload(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, index);
 	try_or_fail!(state.memory.resize_offset(index, U256::from(32)));
 	let index = as_usize_or_fail!(index);
@@ -87,7 +87,7 @@ pub fn mload(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn mstore(state: &mut Machine<H256>) -> Control {
+pub fn mstore(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, index);
 	pop!(state, value);
 	try_or_fail!(state.memory.resize_offset(index, U256::from(32)));
@@ -99,7 +99,7 @@ pub fn mstore(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn mstore8(state: &mut Machine<H256>) -> Control {
+pub fn mstore8(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, index, value);
 	try_or_fail!(state.memory.resize_offset(index, U256::one()));
 	let index = as_usize_or_fail!(index);
@@ -111,7 +111,7 @@ pub fn mstore8(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn jump(state: &mut Machine<H256>) -> Control {
+pub fn jump(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, dest);
 	let dest = as_usize_or_fail!(dest, ExitError::InvalidJump);
 
@@ -123,7 +123,7 @@ pub fn jump(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn jumpi(state: &mut Machine<H256>) -> Control {
+pub fn jumpi(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, dest);
 	pop!(state, value);
 
@@ -140,19 +140,19 @@ pub fn jumpi(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn pc(state: &mut Machine<H256>, position: usize) -> Control {
+pub fn pc(state: &mut ConcreteMachine, position: usize) -> Control {
 	push_u256!(state, U256::from(position));
 	Control::Continue(1)
 }
 
 #[inline]
-pub fn msize(state: &mut Machine<H256>) -> Control {
+pub fn msize(state: &mut ConcreteMachine) -> Control {
 	push_u256!(state, state.memory.effective_len());
 	Control::Continue(1)
 }
 
 #[inline]
-pub fn push(state: &mut Machine<H256>, n: usize, position: usize) -> Control {
+pub fn push(state: &mut ConcreteMachine, n: usize, position: usize) -> Control {
 	let end = min(position + 1 + n, state.code.len());
 	let slice = &state.code[(position + 1)..end];
 	let mut val = [0u8; 32];
@@ -163,7 +163,7 @@ pub fn push(state: &mut Machine<H256>, n: usize, position: usize) -> Control {
 }
 
 #[inline]
-pub fn dup(state: &mut Machine<H256>, n: usize) -> Control {
+pub fn dup(state: &mut ConcreteMachine, n: usize) -> Control {
 	let value = match state.stack.peek(n - 1) {
 		Ok(value) => value,
 		Err(e) => return Control::Exit(e.into()),
@@ -173,7 +173,7 @@ pub fn dup(state: &mut Machine<H256>, n: usize) -> Control {
 }
 
 #[inline]
-pub fn swap(state: &mut Machine<H256>, n: usize) -> Control {
+pub fn swap(state: &mut ConcreteMachine, n: usize) -> Control {
 	let val1 = match state.stack.peek(0) {
 		Ok(value) => value,
 		Err(e) => return Control::Exit(e.into()),
@@ -194,7 +194,7 @@ pub fn swap(state: &mut Machine<H256>, n: usize) -> Control {
 }
 
 #[inline]
-pub fn ret(state: &mut Machine<H256>) -> Control {
+pub fn ret(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, start, len);
 	try_or_fail!(state.memory.resize_offset(start, len));
 	state.return_range = start..(start + len);
@@ -202,7 +202,7 @@ pub fn ret(state: &mut Machine<H256>) -> Control {
 }
 
 #[inline]
-pub fn revert(state: &mut Machine<H256>) -> Control {
+pub fn revert(state: &mut ConcreteMachine) -> Control {
 	pop_u256!(state, start, len);
 	try_or_fail!(state.memory.resize_offset(start, len));
 	state.return_range = start..(start + len);
@@ -214,24 +214,24 @@ pub mod sym {
 
 	use crate::{
 		eval::{uth, Control, htu},
-		Machine, SymStackItem,
+		SymbolicMachine, symbolic::{SymWord},
 	};
 
-	pub fn codesize(state: &mut Machine<SymStackItem>) -> Control {
-		let size = SymStackItem::Concrete(uth(U256::from(state.code.len())));
+	pub fn codesize(state: &mut SymbolicMachine) -> Control {
+		let size = SymWord::Concrete(uth(&U256::from(state.code.len())));
 		push!(state, size);
 		Control::Continue(1)
 	}
 
-	pub fn codecopy(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn codecopy(state: &mut SymbolicMachine) -> Control {
 		pop!(state, memory_offset, code_offset, len);
 
 		let (memory_offset, code_offset, len) = match (memory_offset, code_offset, len) {
 			(
-				SymStackItem::Concrete(x),
-				SymStackItem::Concrete(y),
-				SymStackItem::Concrete(z),
-			) => (htu(x), htu(y), htu(z)),
+				SymWord::Concrete(x),
+				SymWord::Concrete(y),
+				SymWord::Concrete(z),
+			) => (htu(&x), htu(&y), htu(&z)),
 
 			_ => panic!("cannot use symbolic args for CODECOPY")
 		};
@@ -244,5 +244,15 @@ pub mod sym {
 			Ok(()) => Control::Continue(1),
 			Err(e) => Control::Exit(e.into()),
 		}
+	}
+
+	pub fn calldataload(state: &mut SymbolicMachine) -> Control {
+		pop!(state, index);
+
+		let ret = state.data.load(index);
+
+		push!(state, ret);
+
+		Control::Continue(1)
 	}
 }

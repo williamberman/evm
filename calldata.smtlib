@@ -1,0 +1,25 @@
+(declare-fun calldata ((_ BitVec 256)) (_ BitVec 8))
+(declare-const length (_ BitVec 256))
+
+(assert (forall ((x (_ BitVec 256))) (=> (bvuge x length) (= (calldata x) #x00))))
+
+(declare-const index (_ BitVec 256))
+
+(declare-const loaded (_ BitVec 16))
+
+(assert (= loaded
+        (concat (calldata index)
+                (calldata (bvadd index #x0000000000000000000000000000000000000000000000000000000000000001)))))
+
+(assert (= (calldata #x0000000000000000000000000000000000000000000000000000000000000000) #xff))
+(assert (= (calldata #x0000000000000000000000000000000000000000000000000000000000000001) #xaa))
+;; Will cause unsat!
+;; (assert (= (calldata #x0000000000000000000000000000000000000000000000000000000000000002) #x55))
+
+(assert (= length #x0000000000000000000000000000000000000000000000000000000000000002))
+                  #x000000000000000000000000000000000000000000000000000000000000000f
+                  #x00000000000000000000000000000000000000000000000000000000000000010
+
+(check-sat)
+
+(get-value (length index loaded))

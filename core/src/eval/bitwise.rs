@@ -106,19 +106,19 @@ pub fn sar(shift: U256, value: U256) -> U256 {
 pub mod sym {
     use amzn_smt_ir::{logic::BvOp, CoreOp};
 
-    use crate::{Machine, SymStackItem, eval::{uth, htu, Control}, symbolic::{bv_256_zero, bv_256_one}};
+    use crate::{SymbolicMachine, eval::{uth, htu, Control}, symbolic::{bv_256_zero, bv_256_one, SymWord}};
 
 	use smallvec::smallvec;
 
-	pub fn iszero(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn iszero(state: &mut SymbolicMachine) -> Control {
 		pop!(state, op);
 
 		let ret = match op {
-			SymStackItem::Concrete(xop) => {
-				SymStackItem::Concrete(uth(super::iszero(htu(xop))))
+			SymWord::Concrete(xop) => {
+				SymWord::Concrete(uth(&super::iszero(htu(&xop))))
 			}
 
-			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(
+			SymWord::Symbolic(xop) => SymWord::Symbolic(
 				CoreOp::Ite(
 					CoreOp::Eq(smallvec![xop, bv_256_zero()]).into(),
 					bv_256_one(),
@@ -133,15 +133,15 @@ pub mod sym {
 		Control::Continue(1)
 	}
 
-	pub fn not(state: &mut Machine<SymStackItem>) -> Control {
+	pub fn not(state: &mut SymbolicMachine) -> Control {
 		pop!(state, op);
 
 		let ret = match op {
-			SymStackItem::Concrete(xop) => {
-				SymStackItem::Concrete(uth(super::not(htu(xop))))
+			SymWord::Concrete(xop) => {
+				SymWord::Concrete(uth(&super::not(htu(&xop))))
 			}
 
-			SymStackItem::Symbolic(xop) => SymStackItem::Symbolic(BvOp::BvNot(xop).into()),
+			SymWord::Symbolic(xop) => SymWord::Symbolic(BvOp::BvNot(xop).into()),
 		};
 
 		push!(state, ret);

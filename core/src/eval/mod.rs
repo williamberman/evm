@@ -113,9 +113,14 @@ static NOT: OpEvals = OpEvals {
 	},
 };
 
-fn eval_byte(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::bitwise::byte)
-}
+static BYTE: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		op2_u256_fn!(state, self::bitwise::byte)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::bitwise::sym::byte(state)
+	},
+};
 
 op2_evals_fn!(SHL, self::bitwise::shl, BvOp::BvShl);
 op2_evals_fn!(SHR, self::bitwise::shr, BvOp::BvLshr);
@@ -449,7 +454,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::OR.as_usize()] = OR.concrete as _;
 	table[Opcode::XOR.as_usize()] = XOR.concrete as _;
 	table[Opcode::NOT.as_usize()] = NOT.concrete as _;
-	table[Opcode::BYTE.as_usize()] = eval_byte as _;
+	table[Opcode::BYTE.as_usize()] = BYTE.concrete as _;
 	table[Opcode::SHL.as_usize()] = SHL.concrete as _;
 	table[Opcode::SHR.as_usize()] = SHR.concrete as _;
 	table[Opcode::SAR.as_usize()] = SAR.concrete as _;
@@ -567,7 +572,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::OR.as_usize()] = OR.symbolic as _;
 	table[Opcode::XOR.as_usize()] = XOR.symbolic as _;
 	table[Opcode::NOT.as_usize()] = NOT.symbolic as _;
-	// BYTE
+	table[Opcode::BYTE.as_usize()] = BYTE.symbolic as _;
 	table[Opcode::SHL.as_usize()] = SHL.symbolic as _;
 	table[Opcode::SHR.as_usize()] = SHR.symbolic as _;
 	table[Opcode::SAR.as_usize()] = SAR.symbolic as _;

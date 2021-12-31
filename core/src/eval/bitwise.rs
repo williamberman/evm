@@ -104,9 +104,15 @@ pub fn sar(shift: U256, value: U256) -> U256 {
 }
 
 pub mod sym {
-    use amzn_smt_ir::{logic::BvOp, CoreOp};
+	use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
+	use num::bigint::ToBigUint;
+	use primitive_types::H256;
 
-    use crate::{SymbolicMachine, eval::{uth, htu, Control}, symbolic::{bv_256_zero, bv_256_one, SymWord}};
+	use crate::{
+		eval::{htu, uth, Control},
+		symbolic::{bv_256_one, bv_256_zero, SymWord},
+		SymbolicMachine,
+	};
 
 	use smallvec::smallvec;
 
@@ -114,9 +120,7 @@ pub mod sym {
 		pop!(state, op);
 
 		let ret = match op {
-			SymWord::Concrete(xop) => {
-				SymWord::Concrete(uth(&super::iszero(htu(&xop))))
-			}
+			SymWord::Concrete(xop) => SymWord::Concrete(uth(&super::iszero(htu(&xop)))),
 
 			SymWord::Symbolic(xop) => SymWord::Symbolic(
 				CoreOp::Ite(
@@ -137,11 +141,52 @@ pub mod sym {
 		pop!(state, op);
 
 		let ret = match op {
-			SymWord::Concrete(xop) => {
-				SymWord::Concrete(uth(&super::not(htu(&xop))))
-			}
+			SymWord::Concrete(xop) => SymWord::Concrete(uth(&super::not(htu(&xop)))),
 
 			SymWord::Symbolic(xop) => SymWord::Symbolic(BvOp::BvNot(xop).into()),
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
+	}
+
+	pub fn byte(state: &mut SymbolicMachine) -> Control {
+		// Select byte at index from value. Index starts from high byte
+		pop!(state, index, value);
+
+		let index = match index {
+			SymWord::Concrete(index) => htu(&index),
+			SymWord::Symbolic(_) => panic!("cannot use symbolic index for BYTE"),
+		};
+
+		let ret = match value {
+			SymWord::Concrete(value) => SymWord::Concrete(uth(&super::byte(index, htu(&value)))),
+			SymWord::Symbolic(value) => {
+				let index = index.as_usize();
+
+				if index >= 32 {
+					SymWord::Concrete(H256::zero())
+				} else {
+					let low_bit_index = (31 - index) * 31;
+					let high_bit_index = low_bit_index + 7;
+
+					SymWord::Symbolic(
+						BvOp::ZeroExtend(
+							[Index::Numeral(248.to_biguint().unwrap().into()).into()],
+							BvOp::Extract(
+								[
+									Index::Numeral(high_bit_index.to_biguint().unwrap().into()).into(),
+									Index::Numeral(low_bit_index.to_biguint().unwrap().into()).into(),
+								],
+								value,
+							)
+							.into(),
+						)
+						.into(),
+					)
+				}
+			}
 		};
 
 		push!(state, ret);

@@ -295,3 +295,16 @@ macro_rules! dup_op {
 		};
 	};
 }
+
+macro_rules! swap_op {
+	( $name:ident, $n:literal ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+				self::misc::swap(state, $n)
+			},
+			symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+				self::misc::swap(state, $n)
+			},
+		};
+	};
+}

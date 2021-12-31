@@ -1,5 +1,8 @@
 use super::Control;
-use crate::{ConcreteMachine, ExitError, ExitFatal, ExitRevert, ExitSucceed, stack::StackItem, memory::MemoryItem, Machine};
+use crate::{
+	memory::MemoryItem, stack::StackItem, ConcreteMachine, ExitError, ExitFatal, ExitRevert,
+	ExitSucceed, Machine,
+};
 use core::cmp::min;
 use primitive_types::{H256, U256};
 
@@ -176,7 +179,10 @@ pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
 }
 
 #[inline]
-pub fn swap(state: &mut ConcreteMachine, n: usize) -> Control {
+pub fn swap<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+	n: usize,
+) -> Control {
 	let val1 = match state.stack.peek(0) {
 		Ok(value) => value,
 		Err(e) => return Control::Exit(e.into()),

@@ -377,69 +377,22 @@ dup_op!(DUP14, 14);
 dup_op!(DUP15, 15);
 dup_op!(DUP16, 16);
 
-fn eval_swap1(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 1)
-}
-
-fn eval_swap2(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 2)
-}
-
-fn eval_swap3(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 3)
-}
-
-fn eval_swap4(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 4)
-}
-
-fn eval_swap5(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 5)
-}
-
-fn eval_swap6(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 6)
-}
-
-fn eval_swap7(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 7)
-}
-
-fn eval_swap8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 8)
-}
-
-fn eval_swap9(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 9)
-}
-
-fn eval_swap10(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 10)
-}
-
-fn eval_swap11(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 11)
-}
-
-fn eval_swap12(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 12)
-}
-
-fn eval_swap13(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 13)
-}
-
-fn eval_swap14(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 14)
-}
-
-fn eval_swap15(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 15)
-}
-
-fn eval_swap16(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::swap(state, 16)
-}
+swap_op!(SWAP1, 1);
+swap_op!(SWAP2, 2);
+swap_op!(SWAP3, 3);
+swap_op!(SWAP4, 4);
+swap_op!(SWAP5, 5);
+swap_op!(SWAP6, 6);
+swap_op!(SWAP7, 7);
+swap_op!(SWAP8, 8);
+swap_op!(SWAP9, 9);
+swap_op!(SWAP10, 10);
+swap_op!(SWAP11, 11);
+swap_op!(SWAP12, 12);
+swap_op!(SWAP13, 13);
+swap_op!(SWAP14, 14);
+swap_op!(SWAP15, 15);
+swap_op!(SWAP16, 16);
 
 fn eval_return(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::ret(state)
@@ -565,22 +518,22 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::DUP15.as_usize()] = DUP15.concrete as _;
 	table[Opcode::DUP16.as_usize()] = DUP16.concrete as _;
 
-	table[Opcode::SWAP1.as_usize()] = eval_swap1 as _;
-	table[Opcode::SWAP2.as_usize()] = eval_swap2 as _;
-	table[Opcode::SWAP3.as_usize()] = eval_swap3 as _;
-	table[Opcode::SWAP4.as_usize()] = eval_swap4 as _;
-	table[Opcode::SWAP5.as_usize()] = eval_swap5 as _;
-	table[Opcode::SWAP6.as_usize()] = eval_swap6 as _;
-	table[Opcode::SWAP7.as_usize()] = eval_swap7 as _;
-	table[Opcode::SWAP8.as_usize()] = eval_swap8 as _;
-	table[Opcode::SWAP9.as_usize()] = eval_swap9 as _;
-	table[Opcode::SWAP10.as_usize()] = eval_swap10 as _;
-	table[Opcode::SWAP11.as_usize()] = eval_swap11 as _;
-	table[Opcode::SWAP12.as_usize()] = eval_swap12 as _;
-	table[Opcode::SWAP13.as_usize()] = eval_swap13 as _;
-	table[Opcode::SWAP14.as_usize()] = eval_swap14 as _;
-	table[Opcode::SWAP15.as_usize()] = eval_swap15 as _;
-	table[Opcode::SWAP16.as_usize()] = eval_swap16 as _;
+	table[Opcode::SWAP1.as_usize()] = SWAP1.concrete as _;
+	table[Opcode::SWAP2.as_usize()] = SWAP2.concrete as _;
+	table[Opcode::SWAP3.as_usize()] = SWAP3.concrete as _;
+	table[Opcode::SWAP4.as_usize()] = SWAP4.concrete as _;
+	table[Opcode::SWAP5.as_usize()] = SWAP5.concrete as _;
+	table[Opcode::SWAP6.as_usize()] = SWAP6.concrete as _;
+	table[Opcode::SWAP7.as_usize()] = SWAP7.concrete as _;
+	table[Opcode::SWAP8.as_usize()] = SWAP8.concrete as _;
+	table[Opcode::SWAP9.as_usize()] = SWAP9.concrete as _;
+	table[Opcode::SWAP10.as_usize()] = SWAP10.concrete as _;
+	table[Opcode::SWAP11.as_usize()] = SWAP11.concrete as _;
+	table[Opcode::SWAP12.as_usize()] = SWAP12.concrete as _;
+	table[Opcode::SWAP13.as_usize()] = SWAP13.concrete as _;
+	table[Opcode::SWAP14.as_usize()] = SWAP14.concrete as _;
+	table[Opcode::SWAP15.as_usize()] = SWAP15.concrete as _;
+	table[Opcode::SWAP16.as_usize()] = SWAP16.concrete as _;
 
 	table[Opcode::RETURN.as_usize()] = eval_return as _;
 	table[Opcode::REVERT.as_usize()] = eval_revert as _;
@@ -640,6 +593,23 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::DUP14.as_usize()] = DUP14.symbolic as _;
 	table[Opcode::DUP15.as_usize()] = DUP15.symbolic as _;
 	table[Opcode::DUP16.as_usize()] = DUP16.symbolic as _;
+
+	table[Opcode::SWAP1.as_usize()] = SWAP1.symbolic as _;
+	table[Opcode::SWAP2.as_usize()] = SWAP2.symbolic as _;
+	table[Opcode::SWAP3.as_usize()] = SWAP3.symbolic as _;
+	table[Opcode::SWAP4.as_usize()] = SWAP4.symbolic as _;
+	table[Opcode::SWAP5.as_usize()] = SWAP5.symbolic as _;
+	table[Opcode::SWAP6.as_usize()] = SWAP6.symbolic as _;
+	table[Opcode::SWAP7.as_usize()] = SWAP7.symbolic as _;
+	table[Opcode::SWAP8.as_usize()] = SWAP8.symbolic as _;
+	table[Opcode::SWAP9.as_usize()] = SWAP9.symbolic as _;
+	table[Opcode::SWAP10.as_usize()] = SWAP10.symbolic as _;
+	table[Opcode::SWAP11.as_usize()] = SWAP11.symbolic as _;
+	table[Opcode::SWAP12.as_usize()] = SWAP12.symbolic as _;
+	table[Opcode::SWAP13.as_usize()] = SWAP13.symbolic as _;
+	table[Opcode::SWAP14.as_usize()] = SWAP14.symbolic as _;
+	table[Opcode::SWAP15.as_usize()] = SWAP15.symbolic as _;
+	table[Opcode::SWAP16.as_usize()] = SWAP16.symbolic as _;
 
 	table
 };

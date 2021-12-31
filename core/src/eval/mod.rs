@@ -5,8 +5,6 @@ mod bitwise;
 mod misc;
 
 use crate::{
-	memory::MemoryItem,
-	stack::StackItem,
 	symbolic::{self, bv_256_one, bv_256_zero, SymByte, SymWord},
 	ConcreteMachine, ExitError, ExitReason, ExitSucceed, Machine, Opcode, SymbolicCalldata,
 	SymbolicMachine,
@@ -217,13 +215,7 @@ fn eval_msize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) ->
 	self::misc::msize(state)
 }
 
-fn eval_jumpdest<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
-	Control::Continue(1)
-}
+same_op!(JUMPDEST, Control::Continue(1));
 
 fn eval_push1(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
 	self::misc::push(state, 1, position)
@@ -454,7 +446,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::JUMPI.as_usize()] = eval_jumpi as _;
 	table[Opcode::PC.as_usize()] = PC.concrete as _;
 	table[Opcode::MSIZE.as_usize()] = eval_msize as _;
-	table[Opcode::JUMPDEST.as_usize()] = eval_jumpdest as _;
+	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.concrete as _;
 
 	table[Opcode::PUSH1.as_usize()] = eval_push1 as _;
 	table[Opcode::PUSH2.as_usize()] = eval_push2 as _;
@@ -572,7 +564,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	// TODO -- JUMPI
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
 	// TODO -- MSIZE
-	// TODO -- JUMPDEST
+	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.symbolic as _;
 
 	// TODO -- PUSH1
 	// TODO -- PUSH2

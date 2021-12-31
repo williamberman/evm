@@ -211,9 +211,14 @@ static PC: OpEvals = OpEvals {
 	},
 };
 
-fn eval_msize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::msize(state)
-}
+static MSIZE: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::msize(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::msize(state)
+	},
+};
 
 same_op!(JUMPDEST, Control::Continue(1));
 
@@ -445,7 +450,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::JUMP.as_usize()] = eval_jump as _;
 	table[Opcode::JUMPI.as_usize()] = eval_jumpi as _;
 	table[Opcode::PC.as_usize()] = PC.concrete as _;
-	table[Opcode::MSIZE.as_usize()] = eval_msize as _;
+	table[Opcode::MSIZE.as_usize()] = MSIZE.concrete as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.concrete as _;
 
 	table[Opcode::PUSH1.as_usize()] = eval_push1 as _;
@@ -563,7 +568,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	// TODO -- JUMP
 	// TODO -- JUMPI
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
-	// TODO -- MSIZE
+	table[Opcode::MSIZE.as_usize()] = MSIZE.symbolic as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.symbolic as _;
 
 	// TODO -- PUSH1

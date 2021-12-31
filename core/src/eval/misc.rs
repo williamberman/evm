@@ -325,4 +325,10 @@ pub mod sym {
 		push!(state, ret);
 		Control::Continue(1)
 	}
+
+	pub fn msize(state: &mut SymbolicMachine) -> Control {
+		let ret = SymWord::Concrete(uth(&state.memory.effective_len()));
+		push!(state, ret);
+		Control::Continue(1)
+	}
 }

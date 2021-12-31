@@ -1,5 +1,5 @@
 use super::Control;
-use crate::{ConcreteMachine, ExitError, ExitFatal, ExitRevert, ExitSucceed};
+use crate::{ConcreteMachine, ExitError, ExitFatal, ExitRevert, ExitSucceed, stack::StackItem, memory::MemoryItem, Machine};
 use core::cmp::min;
 use primitive_types::{H256, U256};
 
@@ -163,7 +163,10 @@ pub fn push(state: &mut ConcreteMachine, n: usize, position: usize) -> Control {
 }
 
 #[inline]
-pub fn dup(state: &mut ConcreteMachine, n: usize) -> Control {
+pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+	n: usize,
+) -> Control {
 	let value = match state.stack.peek(n - 1) {
 		Ok(value) => value,
 		Err(e) => return Control::Exit(e.into()),

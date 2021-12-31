@@ -5,10 +5,11 @@ mod bitwise;
 mod misc;
 
 use crate::{
+	memory::MemoryItem,
 	stack::StackItem,
-	symbolic::{self, bv_256_one, bv_256_zero, SymWord, SymByte},
+	symbolic::{self, bv_256_one, bv_256_zero, SymByte, SymWord},
 	ConcreteMachine, ExitError, ExitReason, ExitSucceed, Machine, Opcode, SymbolicCalldata,
-	SymbolicMachine, memory::MemoryItem,
+	SymbolicMachine,
 };
 use amzn_smt_ir::{logic::BvOp, CoreOp};
 use core::ops::{BitAnd, BitOr, BitXor};
@@ -23,8 +24,11 @@ pub enum Control {
 	Trap(Opcode),
 }
 
-type OpEval<IStackItem, ICalldata, IMemoryItem> =
-	fn(state: &mut Machine<IStackItem, ICalldata, IMemoryItem>, opcode: Opcode, position: usize) -> Control;
+type OpEval<IStackItem, ICalldata, IMemoryItem> = fn(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+	opcode: Opcode,
+	position: usize,
+) -> Control;
 
 struct OpEvals {
 	concrete: OpEval<H256, Vec<u8>, u8>,
@@ -170,7 +174,7 @@ static CALLDATACOPY: OpEvals = OpEvals {
 	},
 	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::sym::calldatacopy(state)
-	}
+	},
 };
 
 static POP: OpEvals = OpEvals {
@@ -179,7 +183,7 @@ static POP: OpEvals = OpEvals {
 	},
 	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::sym::pop(state)
-	}
+	},
 };
 
 static MLOAD: OpEvals = OpEvals {
@@ -188,7 +192,7 @@ static MLOAD: OpEvals = OpEvals {
 	},
 	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
 		self::misc::sym::mload(state)
-	}
+	},
 };
 
 fn eval_mstore(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
@@ -213,7 +217,7 @@ static PC: OpEvals = OpEvals {
 	},
 	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, position: usize| -> Control {
 		self::misc::sym::pc(state, position)
-	}
+	},
 };
 
 fn eval_msize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
@@ -356,69 +360,22 @@ fn eval_push32(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) ->
 	self::misc::push(state, 32, position)
 }
 
-fn eval_dup1(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 1)
-}
-
-fn eval_dup2(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 2)
-}
-
-fn eval_dup3(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 3)
-}
-
-fn eval_dup4(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 4)
-}
-
-fn eval_dup5(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 5)
-}
-
-fn eval_dup6(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 6)
-}
-
-fn eval_dup7(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 7)
-}
-
-fn eval_dup8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 8)
-}
-
-fn eval_dup9(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 9)
-}
-
-fn eval_dup10(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 10)
-}
-
-fn eval_dup11(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 11)
-}
-
-fn eval_dup12(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 12)
-}
-
-fn eval_dup13(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 13)
-}
-
-fn eval_dup14(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 14)
-}
-
-fn eval_dup15(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 15)
-}
-
-fn eval_dup16(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::dup(state, 16)
-}
+dup_op!(DUP1, 1);
+dup_op!(DUP2, 2);
+dup_op!(DUP3, 3);
+dup_op!(DUP4, 4);
+dup_op!(DUP5, 5);
+dup_op!(DUP6, 6);
+dup_op!(DUP7, 7);
+dup_op!(DUP8, 8);
+dup_op!(DUP9, 9);
+dup_op!(DUP10, 10);
+dup_op!(DUP11, 11);
+dup_op!(DUP12, 12);
+dup_op!(DUP13, 13);
+dup_op!(DUP14, 14);
+dup_op!(DUP15, 15);
+dup_op!(DUP16, 16);
 
 fn eval_swap1(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::swap(state, 1)
@@ -508,9 +465,11 @@ fn eval_external<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
 	Control::Trap(opcode)
 }
 
-pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> =
-	[fn(state: &mut Machine<IStackItem, ICalldata, IMemoryItem>, opcode: Opcode, position: usize) -> Control;
-		256];
+pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> = [fn(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+	opcode: Opcode,
+	position: usize,
+) -> Control; 256];
 
 pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	let mut table = [eval_external as _; 256];
@@ -589,22 +548,22 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::PUSH31.as_usize()] = eval_push31 as _;
 	table[Opcode::PUSH32.as_usize()] = eval_push32 as _;
 
-	table[Opcode::DUP1.as_usize()] = eval_dup1 as _;
-	table[Opcode::DUP2.as_usize()] = eval_dup2 as _;
-	table[Opcode::DUP3.as_usize()] = eval_dup3 as _;
-	table[Opcode::DUP4.as_usize()] = eval_dup4 as _;
-	table[Opcode::DUP5.as_usize()] = eval_dup5 as _;
-	table[Opcode::DUP6.as_usize()] = eval_dup6 as _;
-	table[Opcode::DUP7.as_usize()] = eval_dup7 as _;
-	table[Opcode::DUP8.as_usize()] = eval_dup8 as _;
-	table[Opcode::DUP9.as_usize()] = eval_dup9 as _;
-	table[Opcode::DUP10.as_usize()] = eval_dup10 as _;
-	table[Opcode::DUP11.as_usize()] = eval_dup11 as _;
-	table[Opcode::DUP12.as_usize()] = eval_dup12 as _;
-	table[Opcode::DUP13.as_usize()] = eval_dup13 as _;
-	table[Opcode::DUP14.as_usize()] = eval_dup14 as _;
-	table[Opcode::DUP15.as_usize()] = eval_dup15 as _;
-	table[Opcode::DUP16.as_usize()] = eval_dup16 as _;
+	table[Opcode::DUP1.as_usize()] = DUP1.concrete as _;
+	table[Opcode::DUP2.as_usize()] = DUP2.concrete as _;
+	table[Opcode::DUP3.as_usize()] = DUP3.concrete as _;
+	table[Opcode::DUP4.as_usize()] = DUP4.concrete as _;
+	table[Opcode::DUP5.as_usize()] = DUP5.concrete as _;
+	table[Opcode::DUP6.as_usize()] = DUP6.concrete as _;
+	table[Opcode::DUP7.as_usize()] = DUP7.concrete as _;
+	table[Opcode::DUP8.as_usize()] = DUP8.concrete as _;
+	table[Opcode::DUP9.as_usize()] = DUP9.concrete as _;
+	table[Opcode::DUP10.as_usize()] = DUP10.concrete as _;
+	table[Opcode::DUP11.as_usize()] = DUP11.concrete as _;
+	table[Opcode::DUP12.as_usize()] = DUP12.concrete as _;
+	table[Opcode::DUP13.as_usize()] = DUP13.concrete as _;
+	table[Opcode::DUP14.as_usize()] = DUP14.concrete as _;
+	table[Opcode::DUP15.as_usize()] = DUP15.concrete as _;
+	table[Opcode::DUP16.as_usize()] = DUP16.concrete as _;
 
 	table[Opcode::SWAP1.as_usize()] = eval_swap1 as _;
 	table[Opcode::SWAP2.as_usize()] = eval_swap2 as _;
@@ -664,6 +623,23 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::POP.as_usize()] = POP.symbolic as _;
 	table[Opcode::MLOAD.as_usize()] = MLOAD.symbolic as _;
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
+
+	table[Opcode::DUP1.as_usize()] = DUP1.symbolic as _;
+	table[Opcode::DUP2.as_usize()] = DUP2.symbolic as _;
+	table[Opcode::DUP3.as_usize()] = DUP3.symbolic as _;
+	table[Opcode::DUP4.as_usize()] = DUP4.symbolic as _;
+	table[Opcode::DUP5.as_usize()] = DUP5.symbolic as _;
+	table[Opcode::DUP6.as_usize()] = DUP6.symbolic as _;
+	table[Opcode::DUP7.as_usize()] = DUP7.symbolic as _;
+	table[Opcode::DUP8.as_usize()] = DUP8.symbolic as _;
+	table[Opcode::DUP9.as_usize()] = DUP9.symbolic as _;
+	table[Opcode::DUP10.as_usize()] = DUP10.symbolic as _;
+	table[Opcode::DUP11.as_usize()] = DUP11.symbolic as _;
+	table[Opcode::DUP12.as_usize()] = DUP12.symbolic as _;
+	table[Opcode::DUP13.as_usize()] = DUP13.symbolic as _;
+	table[Opcode::DUP14.as_usize()] = DUP14.symbolic as _;
+	table[Opcode::DUP15.as_usize()] = DUP15.symbolic as _;
+	table[Opcode::DUP16.as_usize()] = DUP16.symbolic as _;
 
 	table
 };

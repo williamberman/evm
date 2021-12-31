@@ -282,3 +282,16 @@ macro_rules! op2_evals_bool_fn {
 		};
 	};
 }
+
+macro_rules! dup_op {
+	( $name:ident, $n:literal ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+				self::misc::dup(state, $n)
+			},
+			symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+				self::misc::dup(state, $n)
+			},
+		};
+	};
+}

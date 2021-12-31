@@ -45,14 +45,7 @@ pub fn uth(u: &U256) -> H256 {
 	rv
 }
 
-fn eval_stop<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
-	Control::Exit(ExitSucceed::Stopped.into())
-}
-
+same_op!(STOP, Control::Exit(ExitSucceed::Stopped.into()));
 op2_evals_tuple_vec!(ADD, overflowing_add, BvOp::BvAdd);
 op2_evals_tuple_vec!(MUL, overflowing_mul, BvOp::BvMul);
 op2_evals_tuple!(SUB, overflowing_sub, BvOp::BvSub);
@@ -422,7 +415,7 @@ pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> = [fn(
 pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	let mut table = [EXTERNAL.concrete as _; 256];
 
-	table[Opcode::STOP.as_usize()] = eval_stop as _;
+	table[Opcode::STOP.as_usize()] = STOP.concrete as _;
 	table[Opcode::ADD.as_usize()] = ADD.concrete as _;
 	table[Opcode::MUL.as_usize()] = MUL.concrete as _;
 	table[Opcode::SUB.as_usize()] = SUB.concrete as _;
@@ -540,6 +533,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	let mut table = [EXTERNAL.symbolic as _; 256];
 
+	table[Opcode::STOP.as_usize()] = STOP.symbolic as _;
 	table[Opcode::ADD.as_usize()] = ADD.symbolic as _;
 	table[Opcode::MUL.as_usize()] = MUL.symbolic as _;
 	table[Opcode::SUB.as_usize()] = SUB.symbolic as _;

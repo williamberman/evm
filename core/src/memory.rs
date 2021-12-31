@@ -1,25 +1,191 @@
+use crate::eval::htu;
+use crate::symbolic::{bv_8_n, bv_constant_from_u256, SymByte, SymWord};
+use crate::symbolic_calldata::SymbolicCalldata;
 use crate::{ExitError, ExitFatal};
 use alloc::vec::Vec;
+use amzn_smt_ir::logic::BvOp;
+use amzn_smt_ir::CoreOp;
 use core::cmp::min;
 use core::ops::{BitAnd, Not};
 use primitive_types::U256;
+use std::ops::Add;
+
+pub trait MemoryItem: Clone {}
+impl<T: Clone> MemoryItem for T {}
 
 /// A sequencial memory. It uses Rust's `Vec` for internal
 /// representation.
 #[derive(Clone, Debug)]
-pub struct Memory {
-	data: Vec<u8>,
+pub struct Memory<IMemoryItem: MemoryItem> {
+	data: Vec<IMemoryItem>,
 	effective_len: U256,
 	limit: usize,
+	pub default_value: IMemoryItem,
 }
 
-impl Memory {
-	/// Create a new memory with the given limit.
+pub type ConcreteMemory = Memory<u8>;
+pub type SymbolicMemory = Memory<SymByte>;
+
+impl ConcreteMemory {
 	pub fn new(limit: usize) -> Self {
+		Self::internal_new(limit, 0)
+	}
+}
+
+impl SymbolicMemory {
+	pub fn new(limit: usize) -> Self {
+		Self::internal_new(limit, SymByte::Concrete(0))
+	}
+
+	pub fn copy_large_symbolic(
+		&mut self,
+		memory_offset: U256,
+		data_offset: U256,
+		len: U256,
+		data: &SymbolicCalldata,
+	) -> Result<(), ExitFatal> {
+		if len.is_zero() {
+			return Ok(());
+		}
+
+		let memory_offset = if memory_offset > U256::from(usize::MAX) {
+			return Err(ExitFatal::NotSupported);
+		} else {
+			memory_offset.as_usize()
+		};
+
+		let ulen = if len > U256::from(usize::MAX) {
+			return Err(ExitFatal::NotSupported);
+		} else {
+			len.as_usize()
+		};
+
+		let end = match data_offset.checked_add(len) {
+			Some(end) => end,
+			None => return Ok(()),
+		};
+
+		if end > U256::from(usize::MAX) {
+			return Ok(());
+		}
+
+		let data_offset = data_offset.as_usize();
+		let end = end.as_usize();
+
+		let data = match &data.n_bytes {
+			SymWord::Concrete(data_len) => {
+				let data_len = htu(&data_len);
+				if data_len > U256::from(usize::MAX) {
+					panic!("concrete calldata length too large.")
+				}
+				let data_len = data_len.as_usize();
+
+				if data_offset > data_len {
+					return Ok(());
+				}
+
+				let end = min(end, data_len);
+				let mut ns = Vec::with_capacity(end - data_offset);
+
+				let mut idx = data_offset;
+				while idx.lt(&end) {
+					let n = data.get(&U256::from(idx));
+					ns.push(n.clone());
+					idx = idx.add(1);
+				}
+
+				ns
+			}
+
+			SymWord::Symbolic(data_len) => {
+				// Perform the length check symbolically
+				let mut ns = Vec::with_capacity(ulen);
+
+				for offset in 0..ulen {
+					let data_idx = data_offset + offset;
+					let memory_idx = memory_offset + offset;
+
+					let data_idx_u256 = U256::from(data_idx);
+					let n = match data.get(&data_idx_u256) {
+						SymByte::Concrete(n) => bv_8_n(n),
+						SymByte::Symbolic(t) => t,
+					};
+
+					let mem_val = if memory_idx < self.data.len() {
+						self.data[memory_idx].clone()
+					} else {
+						self.default_value.clone()
+					};
+
+					let mem_val = match mem_val {
+						crate::symbolic::Sym::Concrete(n) => bv_8_n(n),
+						crate::symbolic::Sym::Symbolic(t) => t,
+					};
+
+
+					// Why we have to wrap each byte in a length check
+					//
+					// When data_offset + len goes beyond the end of the calldata buffer,
+					//
+					// Note that the diagram shows writing into the memory buffer at the
+					// same offset as reading from the memory buffer. This doesn't change
+					// the example or what we have to do but remember there's a separate
+					// memory write offset.
+					//
+					//       Calldata buffer
+					// 0                        data_len
+					// |--------------------------|
+					//                     |                  |
+					//                     data_offset       len
+					//
+					//                   Concrete copied
+					//                     |------|
+					//
+					//                      Naive symbolic copy
+					//                     |------------------|
+					//
+					//
+					//                   Memory buffer
+					// 0                                            memory_len
+					// |----------------------------------------------|
+					//
+					//
+					//
+					// When `data_len` is concrete, we can ahead of time shrink the copied over buffer.
+					//
+					// Because we model calldata as a UF that when read beyond the end of its length returns
+					// the 0 byte, the naive symbolic copy would write 0 bytes into memory.
+					//
+					// Instead, we use a conditional to
+					// - write the byte from calldata if the calldata index is in calldata's range
+					// - write the byte already in memory if the calldata index is out of range
+					let op= CoreOp::Ite(
+						BvOp::BvUlt(bv_constant_from_u256(&data_idx_u256), data_len.clone()).into(),
+						// We are in range, can write the value read from calldata
+						n,
+						// We are out of range. Must write the existing value in memory at the memory index
+						mem_val
+					);
+
+					ns.push(SymByte::Symbolic(op.into()));
+				}
+
+				ns
+			}
+		};
+
+		self.set(memory_offset, &data[..], Some(ulen))
+	}
+}
+
+impl<IMemoryItem: MemoryItem> Memory<IMemoryItem> {
+	/// Create a new memory with the given limit.
+	fn internal_new(limit: usize, default_value: IMemoryItem) -> Self {
 		Self {
 			data: Vec::new(),
 			effective_len: U256::zero(),
 			limit,
+			default_value,
 		}
 	}
 
@@ -44,7 +210,7 @@ impl Memory {
 	}
 
 	/// Return the full memory.
-	pub fn data(&self) -> &Vec<u8> {
+	pub fn data(&self) -> &Vec<IMemoryItem> {
 		&self.data
 	}
 
@@ -79,9 +245,9 @@ impl Memory {
 	///
 	/// Value of `size` is considered trusted. If they're too large,
 	/// the program can run out of memory, or it can overflow.
-	pub fn get(&self, offset: usize, size: usize) -> Vec<u8> {
+	pub fn get(&self, offset: usize, size: usize) -> Vec<IMemoryItem> {
 		let mut ret = Vec::new();
-		ret.resize(size, 0);
+		ret.resize(size, self.default_value.clone());
 
 		#[allow(clippy::needless_range_loop)]
 		for index in 0..size {
@@ -90,7 +256,7 @@ impl Memory {
 				break;
 			}
 
-			ret[index] = self.data[position];
+			ret[index] = self.data[position].clone();
 		}
 
 		ret
@@ -101,7 +267,7 @@ impl Memory {
 	pub fn set(
 		&mut self,
 		offset: usize,
-		value: &[u8],
+		value: &[IMemoryItem],
 		target_size: Option<usize>,
 	) -> Result<(), ExitFatal> {
 		let target_size = target_size.unwrap_or(value.len());
@@ -118,13 +284,14 @@ impl Memory {
 		}
 
 		if self.data.len() < offset + target_size {
-			self.data.resize(offset + target_size, 0);
+			self.data
+				.resize(offset + target_size, self.default_value.clone());
 		}
 
 		if target_size > value.len() {
 			self.data[offset..((value.len()) + offset)].clone_from_slice(value);
 			for index in (value.len())..target_size {
-				self.data[offset + index] = 0;
+				self.data[offset + index] = self.default_value.clone();
 			}
 		} else {
 			self.data[offset..(target_size + offset)].clone_from_slice(&value[..target_size]);
@@ -139,7 +306,7 @@ impl Memory {
 		memory_offset: U256,
 		data_offset: U256,
 		len: U256,
-		data: &[u8],
+		data: &[IMemoryItem],
 	) -> Result<(), ExitFatal> {
 		// Needed to pass ethereum test defined in
 		// https://github.com/ethereum/tests/commit/17f7e7a6c64bb878c1b6af9dc8371b46c133e46d

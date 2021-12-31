@@ -1,5 +1,5 @@
 use super::Control;
-use crate::{ExitError, ExitFatal, ExitRevert, ExitSucceed, ConcreteMachine};
+use crate::{ConcreteMachine, ExitError, ExitFatal, ExitRevert, ExitSucceed};
 use core::cmp::min;
 use primitive_types::{H256, U256};
 
@@ -213,8 +213,9 @@ pub mod sym {
 	use primitive_types::U256;
 
 	use crate::{
-		eval::{uth, Control, htu},
-		SymbolicMachine, symbolic::{SymWord},
+		eval::{htu, uth, Control},
+		symbolic::{SymByte, SymWord},
+		SymbolicMachine,
 	};
 
 	pub fn codesize(state: &mut SymbolicMachine) -> Control {
@@ -227,19 +228,23 @@ pub mod sym {
 		pop!(state, memory_offset, code_offset, len);
 
 		let (memory_offset, code_offset, len) = match (memory_offset, code_offset, len) {
-			(
-				SymWord::Concrete(x),
-				SymWord::Concrete(y),
-				SymWord::Concrete(z),
-			) => (htu(&x), htu(&y), htu(&z)),
+			(SymWord::Concrete(x), SymWord::Concrete(y), SymWord::Concrete(z)) => {
+				(htu(&x), htu(&y), htu(&z))
+			}
 
-			_ => panic!("cannot use symbolic args for CODECOPY")
+			_ => panic!("cannot use symbolic args for CODECOPY"),
 		};
+
+		let code: Vec<SymByte> = state
+			.code
+			.iter()
+			.map(|x| SymByte::Concrete(x.clone()))
+			.collect();
 
 		try_or_fail!(state.memory.resize_offset(memory_offset, len));
 		match state
 			.memory
-			.copy_large(memory_offset, code_offset, len, &state.code)
+			.copy_large(memory_offset, code_offset, len, &code)
 		{
 			Ok(()) => Control::Continue(1),
 			Err(e) => Control::Exit(e.into()),
@@ -254,5 +259,35 @@ pub mod sym {
 		push!(state, ret);
 
 		Control::Continue(1)
+	}
+
+	pub fn calldatasize(state: &mut SymbolicMachine) -> Control {
+		let len = state.data.n_bytes.clone();
+		push!(state, len);
+		Control::Continue(1)
+	}
+
+	pub fn calldatacopy(state: &mut SymbolicMachine) -> Control {
+		pop!(state, memory_offset, data_offset, len);
+
+		let (memory_offset, data_offset, len) = match (memory_offset, data_offset, len) {
+			(SymWord::Concrete(x), SymWord::Concrete(y), SymWord::Concrete(z)) => {
+				(htu(&x), htu(&y), htu(&z))
+			}
+			_ => panic!("cannot use symbolic args for CALLDATACOPY"),
+		};
+
+		try_or_fail!(state.memory.resize_offset(memory_offset, len));
+		if len == U256::zero() {
+			return Control::Continue(1);
+		}
+
+		match state
+			.memory
+			.copy_large_symbolic(memory_offset, data_offset, len, &state.data)
+		{
+			Ok(()) => Control::Continue(1),
+			Err(e) => Control::Exit(e.into()),
+		}
 	}
 }

@@ -11,11 +11,17 @@ use primitive_types::{H256, U256, H512};
 
 use crate::eval::uth;
 
+pub type SymWord = Sym<H256>;
+pub type SymByte = Sym<u8>;
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum SymWord {
-	Concrete(H256),
+pub enum Sym<T> {
+	Concrete(T),
 	Symbolic(Term),
 }
+
+// TODO this code is gross. Come up with a better way to manage different
+// types and conversions. I.e. {U,H}{256,512}, Vec<u8>, and Term::Constant
 
 #[allow(dead_code)]
 pub fn int_constant<T: ToBigUint>(x: T) -> Term<ALL> {

@@ -5,10 +5,10 @@ mod bitwise;
 mod misc;
 
 use crate::{
-	stack::{StackItem},
-	symbolic::{self, bv_256_one, bv_256_zero, SymWord},
+	stack::StackItem,
+	symbolic::{self, bv_256_one, bv_256_zero, SymWord, SymByte},
 	ConcreteMachine, ExitError, ExitReason, ExitSucceed, Machine, Opcode, SymbolicCalldata,
-	SymbolicMachine,
+	SymbolicMachine, memory::MemoryItem,
 };
 use amzn_smt_ir::{logic::BvOp, CoreOp};
 use core::ops::{BitAnd, BitOr, BitXor};
@@ -23,12 +23,12 @@ pub enum Control {
 	Trap(Opcode),
 }
 
-type OpEval<IStackItem, ICalldata> =
-	fn(state: &mut Machine<IStackItem, ICalldata>, opcode: Opcode, position: usize) -> Control;
+type OpEval<IStackItem, ICalldata, IMemoryItem> =
+	fn(state: &mut Machine<IStackItem, ICalldata, IMemoryItem>, opcode: Opcode, position: usize) -> Control;
 
 struct OpEvals {
-	concrete: OpEval<H256, Vec<u8>>,
-	symbolic: OpEval<SymWord, SymbolicCalldata>,
+	concrete: OpEval<H256, Vec<u8>, u8>,
+	symbolic: OpEval<SymWord, SymbolicCalldata, SymByte>,
 }
 
 pub fn htu(h: &H256) -> U256 {
@@ -41,8 +41,8 @@ pub fn uth(u: &U256) -> H256 {
 	rv
 }
 
-fn eval_stop<IStackItem: StackItem, ICalldata>(
-	_state: &mut Machine<IStackItem, ICalldata>,
+fn eval_stop<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
 	_opcode: Opcode,
 	_position: usize,
 ) -> Control {
@@ -154,13 +154,24 @@ static CALLDATALOAD: OpEvals = OpEvals {
 	},
 };
 
-fn eval_calldatasize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::calldatasize(state)
-}
+static CALLDATASIZE: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::calldatasize(state)
+	},
 
-fn eval_calldatacopy(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::calldatacopy(state)
-}
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::calldatasize(state)
+	},
+};
+
+static CALLDATACOPY: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::calldatacopy(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::calldatacopy(state)
+	}
+};
 
 fn eval_pop(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::pop(state)
@@ -194,8 +205,8 @@ fn eval_msize(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) ->
 	self::misc::msize(state)
 }
 
-fn eval_jumpdest<IStackItem: StackItem, ICalldata>(
-	_state: &mut Machine<IStackItem, ICalldata>,
+fn eval_jumpdest<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
 	_opcode: Opcode,
 	_position: usize,
 ) -> Control {
@@ -466,27 +477,27 @@ fn eval_revert(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -
 	self::misc::revert(state)
 }
 
-fn eval_invalid<IStackItem: StackItem, ICalldata>(
-	_state: &mut Machine<IStackItem, ICalldata>,
+fn eval_invalid<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
 	_opcode: Opcode,
 	_position: usize,
 ) -> Control {
 	Control::Exit(ExitError::DesignatedInvalid.into())
 }
 
-fn eval_external<IStackItem: StackItem, ICalldata>(
-	_state: &mut Machine<IStackItem, ICalldata>,
+fn eval_external<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
+	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
 	opcode: Opcode,
 	_position: usize,
 ) -> Control {
 	Control::Trap(opcode)
 }
 
-pub type DispatchTable<IStackItem, ICalldata> =
-	[fn(state: &mut Machine<IStackItem, ICalldata>, opcode: Opcode, position: usize) -> Control;
+pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> =
+	[fn(state: &mut Machine<IStackItem, ICalldata, IMemoryItem>, opcode: Opcode, position: usize) -> Control;
 		256];
 
-pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>> = {
+pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::STOP.as_usize()] = eval_stop as _;
@@ -518,8 +529,8 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>> = {
 	table[Opcode::CODESIZE.as_usize()] = CODESIZE.concrete as _;
 	table[Opcode::CODECOPY.as_usize()] = CODECOPY.concrete as _;
 	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.concrete as _;
-	table[Opcode::CALLDATASIZE.as_usize()] = eval_calldatasize as _;
-	table[Opcode::CALLDATACOPY.as_usize()] = eval_calldatacopy as _;
+	table[Opcode::CALLDATASIZE.as_usize()] = CALLDATASIZE.concrete as _;
+	table[Opcode::CALLDATACOPY.as_usize()] = CALLDATACOPY.concrete as _;
 	table[Opcode::POP.as_usize()] = eval_pop as _;
 	table[Opcode::MLOAD.as_usize()] = eval_mload as _;
 	table[Opcode::MSTORE.as_usize()] = eval_mstore as _;
@@ -604,7 +615,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>> = {
 	table
 };
 
-pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata> = {
+pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	let mut table = [eval_external as _; 256];
 
 	table[Opcode::ADD.as_usize()] = ADD.symbolic as _;
@@ -633,6 +644,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata> = {
 	table[Opcode::CODESIZE.as_usize()] = CODESIZE.symbolic as _;
 	table[Opcode::CODECOPY.as_usize()] = CODECOPY.symbolic as _;
 	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.symbolic as _;
+	table[Opcode::CALLDATASIZE.as_usize()] = CALLDATASIZE.symbolic as _;
+	table[Opcode::CALLDATACOPY.as_usize()] = CALLDATACOPY.symbolic as _;
 
 	table
 };

@@ -123,7 +123,7 @@ impl<'config> Runtime<'config> {
 		config: &'config Config,
 	) -> Self {
 		Self {
-			machine: Machine::new_concrete(code, data, config.stack_limit, config.memory_limit),
+			machine: ConcreteMachine::new(code, data, config.stack_limit, config.memory_limit),
 			status: Ok(()),
 			return_data_buffer: Vec::new(),
 			context,

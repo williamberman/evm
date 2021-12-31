@@ -1,7 +1,7 @@
-use crate::symbolic::{bv_constant_from_u256, bv_8_n, SymWord, bv_256_n};
+use crate::symbolic::{bv_256_n, bv_8_n, bv_constant_from_u256, SymByte, SymWord};
 pub use crate::valids::Valids;
 
-use crate::eval::{htu};
+use crate::eval::htu;
 use alloc::vec::Vec;
 use amzn_smt_ir::logic::BvOp;
 use amzn_smt_ir::{Term, UF};
@@ -20,7 +20,7 @@ use smallvec::smallvec;
 /// (assert (forall ((x (_ BitVec 256))) (=> (bvuge x n-calldata-bytes) (= (calldata x) #x00))))
 /// ```
 pub struct SymbolicCalldata {
-	n_bytes: SymWord,
+	pub n_bytes: SymWord,
 	elements: Vec<(U256, u8)>,
 }
 
@@ -44,8 +44,19 @@ impl SymbolicCalldata {
 		}
 	}
 
-	fn get(&self, index: &U256) -> Option<u8> {
-		self.elements.iter().find(|x| x.0 == *index)?.1.into()
+	pub fn get(&self, index: &U256) -> SymByte {
+		let n = self.elements.iter().find(|x| x.0 == *index);
+
+		match n {
+			Some(n) => SymByte::Concrete(n.1),
+			None => SymByte::Symbolic(Term::UF(
+				UF {
+					func: CALLDATA_FUNC_NAME.into(),
+					args: Box::new([bv_constant_from_u256(&index)]),
+				}
+				.into(),
+			)),
+		}
 	}
 
 	fn load_from_symbolic_index(&self, index: &Term) -> SymWord {
@@ -81,11 +92,6 @@ impl SymbolicCalldata {
 	fn load_from_concrete_index(&self, index: &H256) -> SymWord {
 		let mut all_concrete = true;
 
-		enum AtIndex {
-			Concrete(u8),
-			Symbolic(Term),
-		}
-
 		let mut values = Vec::with_capacity(32);
 
 		for offset in 0..=31 {
@@ -107,30 +113,24 @@ impl SymbolicCalldata {
 					};
 
 					match rv {
-						Some(n) => AtIndex::Concrete(n),
+						Some(n) => SymByte::Concrete(n),
 
 						// Check if there is already a known concrete value at this byte
-						None => match self.get(&index) {
-							Some(n) => AtIndex::Concrete(n),
+						None => {
+							let n = self.get(&index);
 
-							None => {
+							if let SymByte::Symbolic(_) = n {
 								all_concrete = false;
-
-								AtIndex::Symbolic(Term::UF(
-									UF {
-										func: CALLDATA_FUNC_NAME.into(),
-										args: Box::new([bv_constant_from_u256(&index)]),
-									}
-									.into(),
-								))
 							}
-						},
+
+							n
+						}
 					}
 				}
 
 				None => {
 					// index overflow
-					AtIndex::Concrete(0)
+					SymByte::Concrete(0)
 				}
 			};
 
@@ -146,7 +146,7 @@ impl SymbolicCalldata {
 				}
 
 				let x = match x {
-					&AtIndex::Concrete(x) => x,
+					&SymByte::Concrete(x) => x,
 					_ => panic!("not reachable"),
 				};
 
@@ -159,13 +159,13 @@ impl SymbolicCalldata {
 
 			for x in values.into_iter() {
 				let xterm = match x {
-					AtIndex::Concrete(n) => bv_8_n(n),
-					AtIndex::Symbolic(t) => t,
+					SymByte::Concrete(n) => bv_8_n(n),
+					SymByte::Symbolic(t) => t,
 				};
 
 				term = Some(match term {
 					Some(t) => BvOp::Concat(t, xterm).into(),
-					None => xterm
+					None => xterm,
 				});
 			}
 

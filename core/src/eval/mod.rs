@@ -543,6 +543,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::SMOD.as_usize()] = SMOD.symbolic as _;
 	table[Opcode::ADDMOD.as_usize()] = ADDMOD.symbolic as _;
 	table[Opcode::MULMOD.as_usize()] = MULMOD.symbolic as _;
+	// TODO -- EXP
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.symbolic as _;
 	table[Opcode::LT.as_usize()] = LT.symbolic as _;
 	table[Opcode::GT.as_usize()] = GT.symbolic as _;
@@ -554,6 +555,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::OR.as_usize()] = OR.symbolic as _;
 	table[Opcode::XOR.as_usize()] = XOR.symbolic as _;
 	table[Opcode::NOT.as_usize()] = NOT.symbolic as _;
+	// BYTE
 	table[Opcode::SHL.as_usize()] = SHL.symbolic as _;
 	table[Opcode::SHR.as_usize()] = SHR.symbolic as _;
 	table[Opcode::SAR.as_usize()] = SAR.symbolic as _;
@@ -564,7 +566,46 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::CALLDATACOPY.as_usize()] = CALLDATACOPY.symbolic as _;
 	table[Opcode::POP.as_usize()] = POP.symbolic as _;
 	table[Opcode::MLOAD.as_usize()] = MLOAD.symbolic as _;
+	// TODO -- MSTORE
+	// TODO -- MSTORE8
+	// TODO -- JUMP
+	// TODO -- JUMPI
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
+	// TODO -- MSIZE
+	// TODO -- JUMPDEST
+
+	// TODO -- PUSH1
+	// TODO -- PUSH2
+	// TODO -- PUSH3
+	// TODO -- PUSH4
+	// TODO -- PUSH5
+	// TODO -- PUSH6
+	// TODO -- PUSH7
+	// TODO -- PUSH8
+	// TODO -- PUSH9
+	// TODO -- PUSH10
+	// TODO -- PUSH11
+	// TODO -- PUSH12
+	// TODO -- PUSH13
+	// TODO -- PUSH14
+	// TODO -- PUSH15
+	// TODO -- PUSH16
+	// TODO -- PUSH17
+	// TODO -- PUSH18
+	// TODO -- PUSH19
+	// TODO -- PUSH20
+	// TODO -- PUSH21
+	// TODO -- PUSH22
+	// TODO -- PUSH23
+	// TODO -- PUSH24
+	// TODO -- PUSH25
+	// TODO -- PUSH26
+	// TODO -- PUSH27
+	// TODO -- PUSH28
+	// TODO -- PUSH29
+	// TODO -- PUSH30
+	// TODO -- PUSH31
+	// TODO -- PUSH32
 
 	table[Opcode::DUP1.as_usize()] = DUP1.symbolic as _;
 	table[Opcode::DUP2.as_usize()] = DUP2.symbolic as _;
@@ -600,6 +641,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::SWAP15.as_usize()] = SWAP15.symbolic as _;
 	table[Opcode::SWAP16.as_usize()] = SWAP16.symbolic as _;
 
+	// TODO -- RETURN
+	// TODO -- REVERT
 	table[Opcode::INVALID.as_usize()] = INVALID.symbolic as _;
 
 	table

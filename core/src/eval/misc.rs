@@ -401,4 +401,39 @@ pub mod sym {
 			Err(e) => Control::Exit(e.into()),
 		}
 	}
+
+	pub fn mstore8(state: &mut SymbolicMachine) -> Control {
+		pop!(state, index, value);
+
+		let index = match index {
+			SymWord::Concrete(x) => htu(&x),
+			_ => panic!("cannot use symbolic index for MSTORE"),
+		};
+
+		try_or_fail!(state.memory.resize_offset(index, U256::one()));
+
+		let index = as_usize_or_fail!(index);
+
+		let byte = match value {
+			SymWord::Concrete(x) => SymByte::Concrete(x.as_bytes()[31]),
+			SymWord::Symbolic(x) => {
+				// Extract just the lowest byte
+				SymByte::Symbolic(
+					BvOp::Extract(
+						[
+							Index::Numeral(7.to_biguint().unwrap()).into(),
+							Index::Numeral(0.to_biguint().unwrap()).into(),
+						],
+						x.clone(),
+					)
+					.into(),
+				)
+			}
+		};
+
+		match state.memory.set(index, &[byte], Some(1)) {
+			Ok(()) => Control::Continue(1),
+			Err(e) => Control::Exit(e.into()),
+		}
+	}
 }

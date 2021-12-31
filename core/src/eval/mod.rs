@@ -402,13 +402,16 @@ fn eval_revert(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -
 	self::misc::revert(state)
 }
 
-fn eval_invalid<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
-	_opcode: Opcode,
-	_position: usize,
-) -> Control {
-	Control::Exit(ExitError::DesignatedInvalid.into())
-}
+static INVALID: OpEvals = OpEvals {
+	concrete: |_state: &mut ConcreteMachine,
+	           _opcode: Opcode,
+	           _position: usize|
+	 -> Control { Control::Exit(ExitError::DesignatedInvalid.into()) },
+	symbolic: |_state: &mut SymbolicMachine,
+	           _opcode: Opcode,
+	           _position: usize|
+	 -> Control { Control::Exit(ExitError::DesignatedInvalid.into()) },
+};
 
 fn eval_external<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
 	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
@@ -537,7 +540,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 
 	table[Opcode::RETURN.as_usize()] = eval_return as _;
 	table[Opcode::REVERT.as_usize()] = eval_revert as _;
-	table[Opcode::INVALID.as_usize()] = eval_invalid as _;
+	table[Opcode::INVALID.as_usize()] = INVALID.concrete as _;
 
 	table
 };
@@ -610,6 +613,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::SWAP14.as_usize()] = SWAP14.symbolic as _;
 	table[Opcode::SWAP15.as_usize()] = SWAP15.symbolic as _;
 	table[Opcode::SWAP16.as_usize()] = SWAP16.symbolic as _;
+
+	table[Opcode::INVALID.as_usize()] = INVALID.symbolic as _;
 
 	table
 };

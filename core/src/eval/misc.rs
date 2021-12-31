@@ -219,12 +219,14 @@ pub fn revert(state: &mut ConcreteMachine) -> Control {
 }
 
 pub mod sym {
+	use amzn_smt_ir::{logic::BvOp, Index};
+	use num::bigint::ToBigUint;
 	use primitive_types::U256;
 
 	use crate::{
 		eval::{htu, uth, Control},
 		symbolic::{SymByte, SymWord},
-		ExitFatal, SymbolicMachine, ExitError,
+		ExitError, ExitFatal, SymbolicMachine,
 	};
 
 	pub fn codesize(state: &mut SymbolicMachine) -> Control {
@@ -337,7 +339,7 @@ pub mod sym {
 
 		let dest = match dest {
 			SymWord::Concrete(x) => htu(&x),
-			_ => panic!("cannot use symbolic arg for JUMP")
+			_ => panic!("cannot use symbolic arg for JUMP"),
 		};
 
 		let dest = as_usize_or_fail!(dest, ExitError::InvalidJump);
@@ -346,6 +348,57 @@ pub mod sym {
 			Control::Jump(dest)
 		} else {
 			Control::Exit(ExitError::InvalidJump.into())
+		}
+	}
+
+	pub fn mstore(state: &mut SymbolicMachine) -> Control {
+		pop!(state, index, value);
+
+		let index = match index {
+			SymWord::Concrete(x) => htu(&x),
+			_ => panic!("cannot use symbolic index for MSTORE"),
+		};
+
+		try_or_fail!(state.memory.resize_offset(index, U256::from(32)));
+		let index = as_usize_or_fail!(index);
+
+		let bytes = match value {
+			SymWord::Concrete(x) => x
+				.as_bytes()
+				.iter()
+				.map(|b| SymByte::Concrete(b.clone()))
+				.collect::<Vec<SymByte>>(),
+			SymWord::Symbolic(x) => {
+				// Extract bytes at bit indices from highest to lowest
+				//
+				// extract(255, 248)
+				// extract(247, 240)
+				// ...
+				// extract(7, 0)
+				(0..=31)
+					.rev()
+					.map(|i| {
+						let low_bit_index = i * 31;
+						let high_bit_index = low_bit_index + 7;
+
+						SymByte::Symbolic(
+							BvOp::Extract(
+								[
+									Index::Numeral(high_bit_index.to_biguint().unwrap()).into(),
+									Index::Numeral(low_bit_index.to_biguint().unwrap()).into(),
+								],
+								x.clone(),
+							)
+							.into(),
+						)
+					})
+					.collect()
+			}
+		};
+
+		match state.memory.set(index, &bytes[..], Some(32)) {
+			Ok(()) => Control::Continue(1),
+			Err(e) => Control::Exit(e.into()),
 		}
 	}
 }

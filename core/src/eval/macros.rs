@@ -308,3 +308,16 @@ macro_rules! swap_op {
 		};
 	};
 }
+
+macro_rules! same_op {
+	( $name:ident, $body:expr ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |_state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+				$body
+			},
+			symbolic: |_state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+				$body
+			},
+		};
+	};
+}

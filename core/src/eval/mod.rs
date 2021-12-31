@@ -402,24 +402,16 @@ fn eval_revert(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -
 	self::misc::revert(state)
 }
 
-static INVALID: OpEvals = OpEvals {
-	concrete: |_state: &mut ConcreteMachine,
-	           _opcode: Opcode,
-	           _position: usize|
-	 -> Control { Control::Exit(ExitError::DesignatedInvalid.into()) },
-	symbolic: |_state: &mut SymbolicMachine,
-	           _opcode: Opcode,
-	           _position: usize|
-	 -> Control { Control::Exit(ExitError::DesignatedInvalid.into()) },
-};
+same_op!(INVALID, Control::Exit(ExitError::DesignatedInvalid.into()));
 
-fn eval_external<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	_state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
-	opcode: Opcode,
-	_position: usize,
-) -> Control {
-	Control::Trap(opcode)
-}
+static EXTERNAL: OpEvals = OpEvals {
+	concrete: |_state: &mut ConcreteMachine, opcode: Opcode, _position: usize| -> Control {
+		Control::Trap(opcode)
+	},
+	symbolic: |_state: &mut SymbolicMachine, opcode: Opcode, _position: usize| -> Control {
+		Control::Trap(opcode)
+	},
+};
 
 pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> = [fn(
 	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
@@ -428,7 +420,7 @@ pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> = [fn(
 ) -> Control; 256];
 
 pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
-	let mut table = [eval_external as _; 256];
+	let mut table = [EXTERNAL.concrete as _; 256];
 
 	table[Opcode::STOP.as_usize()] = eval_stop as _;
 	table[Opcode::ADD.as_usize()] = ADD.concrete as _;
@@ -546,7 +538,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 };
 
 pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
-	let mut table = [eval_external as _; 256];
+	let mut table = [EXTERNAL.symbolic as _; 256];
 
 	table[Opcode::ADD.as_usize()] = ADD.symbolic as _;
 	table[Opcode::MUL.as_usize()] = MUL.symbolic as _;

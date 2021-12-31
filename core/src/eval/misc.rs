@@ -224,7 +224,7 @@ pub mod sym {
 	use crate::{
 		eval::{htu, uth, Control},
 		symbolic::{SymByte, SymWord},
-		ExitFatal, SymbolicMachine,
+		ExitFatal, SymbolicMachine, ExitError,
 	};
 
 	pub fn codesize(state: &mut SymbolicMachine) -> Control {
@@ -330,5 +330,22 @@ pub mod sym {
 		let ret = SymWord::Concrete(uth(&state.memory.effective_len()));
 		push!(state, ret);
 		Control::Continue(1)
+	}
+
+	pub fn jump(state: &mut SymbolicMachine) -> Control {
+		pop!(state, dest);
+
+		let dest = match dest {
+			SymWord::Concrete(x) => htu(&x),
+			_ => panic!("cannot use symbolic arg for JUMP")
+		};
+
+		let dest = as_usize_or_fail!(dest, ExitError::InvalidJump);
+
+		if state.valids.is_valid(dest) {
+			Control::Jump(dest)
+		} else {
+			Control::Exit(ExitError::InvalidJump.into())
+		}
 	}
 }

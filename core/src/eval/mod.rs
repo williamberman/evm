@@ -194,9 +194,14 @@ fn eval_mstore8(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) 
 	self::misc::mstore8(state)
 }
 
-fn eval_jump(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::jump(state)
-}
+static JUMP: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::jump(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::jump(state)
+	},
+};
 
 fn eval_jumpi(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::jumpi(state)
@@ -447,7 +452,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::MLOAD.as_usize()] = MLOAD.concrete as _;
 	table[Opcode::MSTORE.as_usize()] = eval_mstore as _;
 	table[Opcode::MSTORE8.as_usize()] = eval_mstore8 as _;
-	table[Opcode::JUMP.as_usize()] = eval_jump as _;
+	table[Opcode::JUMP.as_usize()] = JUMP.concrete as _;
 	table[Opcode::JUMPI.as_usize()] = eval_jumpi as _;
 	table[Opcode::PC.as_usize()] = PC.concrete as _;
 	table[Opcode::MSIZE.as_usize()] = MSIZE.concrete as _;
@@ -565,7 +570,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::MLOAD.as_usize()] = MLOAD.symbolic as _;
 	// TODO -- MSTORE
 	// TODO -- MSTORE8
-	// TODO -- JUMP
+	table[Opcode::JUMP.as_usize()] = JUMP.symbolic as _;
 	// TODO -- JUMPI
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
 	table[Opcode::MSIZE.as_usize()] = MSIZE.symbolic as _;

@@ -210,12 +210,13 @@ pub fn revert(state: &mut ConcreteMachine) -> Control {
 }
 
 pub mod sym {
-	use primitive_types::U256;
+	use primitive_types::{U256};
 
 	use crate::{
 		eval::{htu, uth, Control},
 		symbolic::{SymByte, SymWord},
 		SymbolicMachine,
+		ExitFatal
 	};
 
 	pub fn codesize(state: &mut SymbolicMachine) -> Control {
@@ -289,5 +290,25 @@ pub mod sym {
 			Ok(()) => Control::Continue(1),
 			Err(e) => Control::Exit(e.into()),
 		}
+	}
+
+	pub fn pop(state: &mut SymbolicMachine) -> Control {
+		pop!(state, _val);
+		Control::Continue(1)
+	}
+
+	pub fn mload(state: &mut SymbolicMachine) -> Control {
+		pop!(state, index);
+
+		let index = match index {
+			SymWord::Concrete(x) => htu(&x),
+			_ => panic!("cannot use symbolic args for MLOAD")
+		};
+
+		try_or_fail!(state.memory.resize_offset(index, U256::from(32)));
+		let index = as_usize_or_fail!(index);
+		let value = state.memory.get_word(index);
+		push!(state, value);
+		Control::Continue(1)
 	}
 }

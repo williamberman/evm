@@ -173,13 +173,23 @@ static CALLDATACOPY: OpEvals = OpEvals {
 	}
 };
 
-fn eval_pop(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::pop(state)
-}
+static POP: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::pop(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::pop(state)
+	}
+};
 
-fn eval_mload(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::mload(state)
-}
+static MLOAD: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::mload(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::mload(state)
+	}
+};
 
 fn eval_mstore(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
 	self::misc::mstore(state)
@@ -531,8 +541,8 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.concrete as _;
 	table[Opcode::CALLDATASIZE.as_usize()] = CALLDATASIZE.concrete as _;
 	table[Opcode::CALLDATACOPY.as_usize()] = CALLDATACOPY.concrete as _;
-	table[Opcode::POP.as_usize()] = eval_pop as _;
-	table[Opcode::MLOAD.as_usize()] = eval_mload as _;
+	table[Opcode::POP.as_usize()] = POP.concrete as _;
+	table[Opcode::MLOAD.as_usize()] = MLOAD.concrete as _;
 	table[Opcode::MSTORE.as_usize()] = eval_mstore as _;
 	table[Opcode::MSTORE8.as_usize()] = eval_mstore8 as _;
 	table[Opcode::JUMP.as_usize()] = eval_jump as _;
@@ -646,6 +656,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::CALLDATALOAD.as_usize()] = CALLDATALOAD.symbolic as _;
 	table[Opcode::CALLDATASIZE.as_usize()] = CALLDATASIZE.symbolic as _;
 	table[Opcode::CALLDATACOPY.as_usize()] = CALLDATACOPY.symbolic as _;
+	table[Opcode::POP.as_usize()] = POP.symbolic as _;
+	table[Opcode::MLOAD.as_usize()] = MLOAD.symbolic as _;
 
 	table
 };

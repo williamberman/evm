@@ -4,10 +4,10 @@ use crate::symbolic_calldata::SymbolicCalldata;
 use crate::{ExitError, ExitFatal};
 use alloc::vec::Vec;
 use amzn_smt_ir::logic::BvOp;
-use amzn_smt_ir::CoreOp;
+use amzn_smt_ir::{CoreOp, Term};
 use core::cmp::min;
 use core::ops::{BitAnd, Not};
-use primitive_types::U256;
+use primitive_types::{H256, U256};
 use std::ops::Add;
 
 pub trait MemoryItem: Clone {}
@@ -122,7 +122,6 @@ impl SymbolicMemory {
 						crate::symbolic::Sym::Symbolic(t) => t,
 					};
 
-
 					// Why we have to wrap each byte in a length check
 					//
 					// When data_offset + len goes beyond the end of the calldata buffer,
@@ -159,12 +158,12 @@ impl SymbolicMemory {
 					// Instead, we use a conditional to
 					// - write the byte from calldata if the calldata index is in calldata's range
 					// - write the byte already in memory if the calldata index is out of range
-					let op= CoreOp::Ite(
+					let op = CoreOp::Ite(
 						BvOp::BvUlt(bv_constant_from_u256(&data_idx_u256), data_len.clone()).into(),
 						// We are in range, can write the value read from calldata
 						n,
 						// We are out of range. Must write the existing value in memory at the memory index
-						mem_val
+						mem_val,
 					);
 
 					ns.push(SymByte::Symbolic(op.into()));
@@ -175,6 +174,44 @@ impl SymbolicMemory {
 		};
 
 		self.set(memory_offset, &data[..], Some(ulen))
+	}
+
+	pub fn get_word(&self, offset: usize) -> SymWord {
+		let mut all_concrete = true;
+		let mut concrete_bytes = [0_u8; 32];
+		let mut term: Term;
+
+		let mut f = |memory_index: usize, read_into_index: usize| -> Term {
+			if memory_index >= self.data.len() {
+				return bv_8_n(0);
+			}
+
+			match self.data[memory_index].clone() {
+				SymByte::Concrete(byte) => {
+					concrete_bytes[read_into_index] = byte;
+					bv_8_n(byte)
+				}
+				SymByte::Symbolic(t) => {
+					all_concrete = false;
+					t
+				}
+			}
+		};
+
+		term = f(offset, 0);
+
+		#[allow(clippy::needless_range_loop)]
+		for read_into_index in 1..32 {
+			let memory_index = offset + read_into_index;
+			let t = f(memory_index, read_into_index);
+			term = BvOp::Concat(term, t).into()
+		}
+
+		if all_concrete {
+			SymWord::Concrete(H256::from_slice(&concrete_bytes))
+		} else {
+			SymWord::Symbolic(term)
+		}
 	}
 }
 

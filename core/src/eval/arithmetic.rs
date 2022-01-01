@@ -124,10 +124,11 @@ pub fn signextend(op1: U256, op2: U256) -> U256 {
 pub mod sym {
 	use super::Control;
 	use crate::{
-		symbolic::{bv_256_zero, SymWord, bv_constant_from_h512},
-		eval::{htu, uth}, SymbolicMachine,
+		eval::{htu, uth},
+		symbolic::{bv_256_zero, bv_constant_from_h256, bv_constant_from_h512, SymWord},
+		SymbolicMachine,
 	};
-	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
+	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term, UF};
 	use num::bigint::ToBigUint;
 	use primitive_types::{H256, H512, U256, U512};
 	use smallvec::{smallvec, SmallVec};
@@ -198,11 +199,9 @@ pub mod sym {
 	) -> Option<SymWord> {
 		match (op1, op2, op3) {
 			// We can perform everything concretely
-			(
-				SymWord::Concrete(op1),
-				SymWord::Concrete(op2),
-				SymWord::Concrete(op3),
-			) => SymWord::Concrete(uth(&f(htu(&op1), htu(&op2), htu(&op3)))).into(),
+			(SymWord::Concrete(op1), SymWord::Concrete(op2), SymWord::Concrete(op3)) => {
+				SymWord::Concrete(uth(&f(htu(&op1), htu(&op2), htu(&op3)))).into()
+			}
 			_ => None,
 		}
 	}
@@ -217,11 +216,7 @@ pub mod sym {
 		f: fn(U512, U512) -> U512,
 	) -> Option<SymWord> {
 		let (op1, op2, sym3): (U512, U512, Term) = match (op1, op2, op3) {
-			(
-				SymWord::Concrete(xop1),
-				SymWord::Concrete(xop2),
-				SymWord::Symbolic(sym3),
-			) => (
+			(SymWord::Concrete(xop1), SymWord::Concrete(xop2), SymWord::Symbolic(sym3)) => (
 				htu(&xop1).into(),
 				htu(&xop2).into(),
 				symbolic_zero_extend(sym3),
@@ -256,23 +251,17 @@ pub mod sym {
 		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
 	) -> Option<SymWord> {
 		let (sym1, sym2, op3) = match (op1, op2, op3) {
-			(
-				SymWord::Symbolic(sym1),
-				SymWord::Symbolic(sym2),
-				SymWord::Concrete(xop3),
-			) => (symbolic_zero_extend(sym1), symbolic_zero_extend(sym2), xop3),
+			(SymWord::Symbolic(sym1), SymWord::Symbolic(sym2), SymWord::Concrete(xop3)) => {
+				(symbolic_zero_extend(sym1), symbolic_zero_extend(sym2), xop3)
+			}
 
-			(
-				SymWord::Concrete(xop1),
-				SymWord::Symbolic(sym2),
-				SymWord::Concrete(xop3),
-			) => (concrete_zero_extend(xop1), symbolic_zero_extend(sym2), xop3),
+			(SymWord::Concrete(xop1), SymWord::Symbolic(sym2), SymWord::Concrete(xop3)) => {
+				(concrete_zero_extend(xop1), symbolic_zero_extend(sym2), xop3)
+			}
 
-			(
-				SymWord::Symbolic(sym1),
-				SymWord::Concrete(xop2),
-				SymWord::Concrete(xop3),
-			) => (symbolic_zero_extend(sym1), concrete_zero_extend(xop2), xop3),
+			(SymWord::Symbolic(sym1), SymWord::Concrete(xop2), SymWord::Concrete(xop3)) => {
+				(symbolic_zero_extend(sym1), concrete_zero_extend(xop2), xop3)
+			}
 
 			_ => return None,
 		};
@@ -301,31 +290,19 @@ pub mod sym {
 		f: fn(SmallVec<[Term; 2]>) -> BvOp<Term>,
 	) -> Option<SymWord> {
 		let (sym1, sym2, sym3) = match (op1, op2, op3) {
-			(
-				SymWord::Symbolic(sym1),
-				SymWord::Symbolic(sym2),
-				SymWord::Symbolic(sym3),
-			) => (
+			(SymWord::Symbolic(sym1), SymWord::Symbolic(sym2), SymWord::Symbolic(sym3)) => (
 				symbolic_zero_extend(sym1),
 				symbolic_zero_extend(sym2),
 				symbolic_zero_extend(sym3),
 			),
 
-			(
-				SymWord::Concrete(xop1),
-				SymWord::Symbolic(sym2),
-				SymWord::Symbolic(sym3),
-			) => (
+			(SymWord::Concrete(xop1), SymWord::Symbolic(sym2), SymWord::Symbolic(sym3)) => (
 				concrete_zero_extend(xop1),
 				symbolic_zero_extend(sym2),
 				symbolic_zero_extend(sym3),
 			),
 
-			(
-				SymWord::Symbolic(sym1),
-				SymWord::Concrete(xop2),
-				SymWord::Symbolic(sym3),
-			) => (
+			(SymWord::Symbolic(sym1), SymWord::Concrete(xop2), SymWord::Symbolic(sym3)) => (
 				symbolic_zero_extend(sym1),
 				concrete_zero_extend(xop2),
 				symbolic_zero_extend(sym3),
@@ -387,6 +364,49 @@ pub mod sym {
 			t,
 		)
 		.into()
+	}
+
+	static EXP_FUNC_NAME: &str = "exp";
+
+	pub fn exp(state: &mut SymbolicMachine) -> Control {
+		pop!(state, base, expn);
+
+		let ret = match (base, expn) {
+			(SymWord::Concrete(base), SymWord::Concrete(expn)) => {
+				SymWord::Concrete(uth(&super::exp(htu(&base), htu(&expn))))
+			}
+			(SymWord::Symbolic(base), SymWord::Concrete(expn)) => {
+				if expn == H256::zero() {
+					SymWord::Concrete(uth(&U256::one()))
+				} else {
+					SymWord::Symbolic(Term::UF(
+						UF {
+							func: EXP_FUNC_NAME.into(),
+							args: Box::new([base, bv_constant_from_h256(&expn)]),
+						}
+						.into(),
+					))
+				}
+			}
+			(SymWord::Concrete(base), SymWord::Symbolic(expn)) => SymWord::Symbolic(Term::UF(
+				UF {
+					func: EXP_FUNC_NAME.into(),
+					args: Box::new([bv_constant_from_h256(&base), expn]),
+				}
+				.into(),
+			)),
+			(SymWord::Symbolic(base), SymWord::Symbolic(expn)) => SymWord::Symbolic(Term::UF(
+				UF {
+					func: EXP_FUNC_NAME.into(),
+					args: Box::new([base, expn]),
+				}
+				.into(),
+			)),
+		};
+
+		push!(state, ret);
+
+		Control::Continue(1)
 	}
 }
 

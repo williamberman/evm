@@ -72,9 +72,14 @@ static MULMOD: OpEvals = OpEvals {
 	},
 };
 
-fn eval_exp(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	op2_u256_fn!(state, self::arithmetic::exp)
-}
+static EXP: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		op2_u256_fn!(state, self::arithmetic::exp)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::arithmetic::sym::exp(state)
+	},
+};
 
 static SIGNEXTEND: OpEvals = OpEvals {
 	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
@@ -357,7 +362,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8, u8> = {
 	table[Opcode::SMOD.as_usize()] = SMOD.concrete as _;
 	table[Opcode::ADDMOD.as_usize()] = ADDMOD.concrete as _;
 	table[Opcode::MULMOD.as_usize()] = MULMOD.concrete as _;
-	table[Opcode::EXP.as_usize()] = eval_exp as _;
+	table[Opcode::EXP.as_usize()] = EXP.concrete as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.concrete as _;
 	table[Opcode::LT.as_usize()] = LT.concrete as _;
 	table[Opcode::GT.as_usize()] = GT.concrete as _;
@@ -475,7 +480,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte, Sym
 	table[Opcode::SMOD.as_usize()] = SMOD.symbolic as _;
 	table[Opcode::ADDMOD.as_usize()] = ADDMOD.symbolic as _;
 	table[Opcode::MULMOD.as_usize()] = MULMOD.symbolic as _;
-	// TODO -- EXP
+	table[Opcode::EXP.as_usize()] = EXP.symbolic as _;
 	table[Opcode::SIGNEXTEND.as_usize()] = SIGNEXTEND.symbolic as _;
 	table[Opcode::LT.as_usize()] = LT.symbolic as _;
 	table[Opcode::GT.as_usize()] = GT.symbolic as _;

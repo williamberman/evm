@@ -309,13 +309,23 @@ swap_op!(SWAP14, 14);
 swap_op!(SWAP15, 15);
 swap_op!(SWAP16, 16);
 
-fn eval_return(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::ret(state)
-}
+static RETURN: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::ret(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::ret(state)
+	},
+};
 
-fn eval_revert(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::revert(state)
-}
+static REVERT: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::revert(state)
+	},
+	symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::sym::revert(state)
+	},
+};
 
 same_op!(INVALID, Control::Exit(ExitError::DesignatedInvalid.into()));
 
@@ -445,8 +455,8 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8, u8> = {
 	table[Opcode::SWAP15.as_usize()] = SWAP15.concrete as _;
 	table[Opcode::SWAP16.as_usize()] = SWAP16.concrete as _;
 
-	table[Opcode::RETURN.as_usize()] = eval_return as _;
-	table[Opcode::REVERT.as_usize()] = eval_revert as _;
+	table[Opcode::RETURN.as_usize()] = RETURN.concrete as _;
+	table[Opcode::REVERT.as_usize()] = REVERT.concrete as _;
 	table[Opcode::INVALID.as_usize()] = INVALID.concrete as _;
 
 	table
@@ -563,8 +573,8 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte, Sym
 	table[Opcode::SWAP15.as_usize()] = SWAP15.symbolic as _;
 	table[Opcode::SWAP16.as_usize()] = SWAP16.symbolic as _;
 
-	// TODO -- RETURN
-	// TODO -- REVERT
+	table[Opcode::RETURN.as_usize()] = RETURN.symbolic as _;
+	table[Opcode::REVERT.as_usize()] = REVERT.symbolic as _;
 	table[Opcode::INVALID.as_usize()] = INVALID.symbolic as _;
 
 	table

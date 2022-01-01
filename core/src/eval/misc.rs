@@ -226,7 +226,7 @@ pub mod sym {
 	use crate::{
 		eval::{htu, uth, Control},
 		symbolic::{extract_bytes_to_word, SymByte, SymWord},
-		ExitError, ExitFatal, SymbolicMachine,
+		ExitError, ExitFatal, ExitRevert, ExitSucceed, SymbolicMachine,
 	};
 
 	pub fn codesize(state: &mut SymbolicMachine) -> Control {
@@ -447,5 +447,32 @@ pub mod sym {
 		push!(state, ret);
 
 		Control::Continue(1 + n)
+	}
+
+	pub fn ret(state: &mut SymbolicMachine) -> Control {
+		pop!(state, start, len);
+
+		let (start, len) = match (start, len) {
+			(SymWord::Concrete(start), SymWord::Concrete(len)) => (htu(&start), htu(&len)),
+			_ => panic!("cannot use symbolic arguments for RETURN"),
+		};
+
+		try_or_fail!(state.memory.resize_offset(start, len));
+		state.return_range = start..(start + len);
+		Control::Exit(ExitSucceed::Returned.into())
+	}
+
+	pub fn revert(state: &mut SymbolicMachine) -> Control {
+		pop!(state, start, len);
+
+		let (start, len) = match (start, len) {
+			(SymWord::Concrete(start), SymWord::Concrete(len)) => (htu(&start), htu(&len)),
+			_ => panic!("cannot use symbolic arguments for REVERT"),
+		};
+
+		try_or_fail!(state.memory.resize_offset(start, len));
+		state.return_range = start..(start + len);
+
+		Control::Exit(ExitRevert::Reverted.into())
 	}
 }

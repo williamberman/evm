@@ -1,13 +1,13 @@
 use crate::eval::htu;
-use crate::symbolic::{bv_8_n, bv_constant_from_u256, SymByte, SymWord};
+use crate::symbolic::{bv_8_n, bv_constant_from_u256, extract_bytes_to_word, SymByte, SymWord};
 use crate::symbolic_calldata::SymbolicCalldata;
 use crate::{ExitError, ExitFatal};
 use alloc::vec::Vec;
 use amzn_smt_ir::logic::BvOp;
-use amzn_smt_ir::{CoreOp, Term};
+use amzn_smt_ir::CoreOp;
 use core::cmp::min;
 use core::ops::{BitAnd, Not};
-use primitive_types::{H256, U256};
+use primitive_types::U256;
 use std::ops::Add;
 
 pub trait MemoryItem: Clone {}
@@ -177,41 +177,7 @@ impl SymbolicMemory {
 	}
 
 	pub fn get_word(&self, offset: usize) -> SymWord {
-		let mut all_concrete = true;
-		let mut concrete_bytes = [0_u8; 32];
-		let mut term: Term;
-
-		let mut f = |memory_index: usize, read_into_index: usize| -> Term {
-			if memory_index >= self.data.len() {
-				return bv_8_n(0);
-			}
-
-			match self.data[memory_index].clone() {
-				SymByte::Concrete(byte) => {
-					concrete_bytes[read_into_index] = byte;
-					bv_8_n(byte)
-				}
-				SymByte::Symbolic(t) => {
-					all_concrete = false;
-					t
-				}
-			}
-		};
-
-		term = f(offset, 0);
-
-		#[allow(clippy::needless_range_loop)]
-		for read_into_index in 1..32 {
-			let memory_index = offset + read_into_index;
-			let t = f(memory_index, read_into_index);
-			term = BvOp::Concat(term, t).into()
-		}
-
-		if all_concrete {
-			SymWord::Concrete(H256::from_slice(&concrete_bytes))
-		} else {
-			SymWord::Symbolic(term)
-		}
+		extract_bytes_to_word(&self.data, offset, 32, true)
 	}
 }
 

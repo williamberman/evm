@@ -1,5 +1,4 @@
 use evm_core::ConcreteMachine;
-use std::rc::Rc;
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 	return haystack
@@ -27,7 +26,7 @@ fn handle_data(sequence: &[u8]) {
 	let (code, data) = split_at_delim(sequence, vec![0xde, 0xad, 0xbe, 0xef].as_slice());
 	let stack_limit = 1024;
 	let memory_limit = 10000;
-	let mut vm = ConcreteMachine::new(Rc::new(code), data, stack_limit, memory_limit);
+	let mut vm = ConcreteMachine::new(code, data, stack_limit, memory_limit);
 	let res = vm.run();
 	#[cfg(not(fuzzing))]
 	{

@@ -22,15 +22,15 @@ pub enum Control {
 	Trap(Opcode),
 }
 
-type OpEval<IStackItem, ICalldata, IMemoryItem> = fn(
-	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+type OpEval<IStackItem, ICalldata, IMemoryItem, ICodeItem> = fn(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	opcode: Opcode,
 	position: usize,
 ) -> Control;
 
 struct OpEvals {
-	concrete: OpEval<H256, Vec<u8>, u8>,
-	symbolic: OpEval<SymWord, SymbolicCalldata, SymByte>,
+	concrete: OpEval<H256, Vec<u8>, u8, u8>,
+	symbolic: OpEval<SymWord, SymbolicCalldata, SymByte, SymByte>,
 }
 
 pub fn htu(h: &H256) -> U256 {
@@ -242,133 +242,38 @@ static MSIZE: OpEvals = OpEvals {
 
 same_op!(JUMPDEST, Control::Continue(1));
 
-fn eval_push1(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 1, position)
-}
-
-fn eval_push2(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 2, position)
-}
-
-fn eval_push3(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 3, position)
-}
-
-fn eval_push4(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 4, position)
-}
-
-fn eval_push5(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 5, position)
-}
-
-fn eval_push6(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 6, position)
-}
-
-fn eval_push7(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 7, position)
-}
-
-fn eval_push8(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 8, position)
-}
-
-fn eval_push9(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 9, position)
-}
-
-fn eval_push10(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 10, position)
-}
-
-fn eval_push11(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 11, position)
-}
-
-fn eval_push12(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 12, position)
-}
-
-fn eval_push13(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 13, position)
-}
-
-fn eval_push14(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 14, position)
-}
-
-fn eval_push15(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 15, position)
-}
-
-fn eval_push16(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 16, position)
-}
-
-fn eval_push17(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 17, position)
-}
-
-fn eval_push18(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 18, position)
-}
-
-fn eval_push19(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 19, position)
-}
-
-fn eval_push20(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 20, position)
-}
-
-fn eval_push21(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 21, position)
-}
-
-fn eval_push22(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 22, position)
-}
-
-fn eval_push23(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 23, position)
-}
-
-fn eval_push24(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 24, position)
-}
-
-fn eval_push25(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 25, position)
-}
-
-fn eval_push26(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 26, position)
-}
-
-fn eval_push27(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 27, position)
-}
-
-fn eval_push28(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 28, position)
-}
-
-fn eval_push29(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 29, position)
-}
-
-fn eval_push30(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 30, position)
-}
-
-fn eval_push31(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 31, position)
-}
-
-fn eval_push32(state: &mut ConcreteMachine, _opcode: Opcode, position: usize) -> Control {
-	self::misc::push(state, 32, position)
-}
+push_op!(PUSH1, 1);
+push_op!(PUSH2, 2);
+push_op!(PUSH3, 3);
+push_op!(PUSH4, 4);
+push_op!(PUSH5, 5);
+push_op!(PUSH6, 6);
+push_op!(PUSH7, 7);
+push_op!(PUSH8, 8);
+push_op!(PUSH9, 9);
+push_op!(PUSH10, 10);
+push_op!(PUSH11, 11);
+push_op!(PUSH12, 12);
+push_op!(PUSH13, 13);
+push_op!(PUSH14, 14);
+push_op!(PUSH15, 15);
+push_op!(PUSH16, 16);
+push_op!(PUSH17, 17);
+push_op!(PUSH18, 18);
+push_op!(PUSH19, 19);
+push_op!(PUSH20, 20);
+push_op!(PUSH21, 21);
+push_op!(PUSH22, 22);
+push_op!(PUSH23, 23);
+push_op!(PUSH24, 24);
+push_op!(PUSH25, 25);
+push_op!(PUSH26, 26);
+push_op!(PUSH27, 27);
+push_op!(PUSH28, 28);
+push_op!(PUSH29, 29);
+push_op!(PUSH30, 30);
+push_op!(PUSH31, 31);
+push_op!(PUSH32, 32);
 
 dup_op!(DUP1, 1);
 dup_op!(DUP2, 2);
@@ -423,13 +328,13 @@ static EXTERNAL: OpEvals = OpEvals {
 	},
 };
 
-pub type DispatchTable<IStackItem, ICalldata, IMemoryItem> = [fn(
-	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+pub type DispatchTable<IStackItem, ICalldata, IMemoryItem, ICodeItem> = [fn(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	opcode: Opcode,
 	position: usize,
 ) -> Control; 256];
 
-pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
+pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8, u8> = {
 	let mut table = [EXTERNAL.concrete as _; 256];
 
 	table[Opcode::STOP.as_usize()] = STOP.concrete as _;
@@ -473,38 +378,38 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table[Opcode::MSIZE.as_usize()] = MSIZE.concrete as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.concrete as _;
 
-	table[Opcode::PUSH1.as_usize()] = eval_push1 as _;
-	table[Opcode::PUSH2.as_usize()] = eval_push2 as _;
-	table[Opcode::PUSH3.as_usize()] = eval_push3 as _;
-	table[Opcode::PUSH4.as_usize()] = eval_push4 as _;
-	table[Opcode::PUSH5.as_usize()] = eval_push5 as _;
-	table[Opcode::PUSH6.as_usize()] = eval_push6 as _;
-	table[Opcode::PUSH7.as_usize()] = eval_push7 as _;
-	table[Opcode::PUSH8.as_usize()] = eval_push8 as _;
-	table[Opcode::PUSH9.as_usize()] = eval_push9 as _;
-	table[Opcode::PUSH10.as_usize()] = eval_push10 as _;
-	table[Opcode::PUSH11.as_usize()] = eval_push11 as _;
-	table[Opcode::PUSH12.as_usize()] = eval_push12 as _;
-	table[Opcode::PUSH13.as_usize()] = eval_push13 as _;
-	table[Opcode::PUSH14.as_usize()] = eval_push14 as _;
-	table[Opcode::PUSH15.as_usize()] = eval_push15 as _;
-	table[Opcode::PUSH16.as_usize()] = eval_push16 as _;
-	table[Opcode::PUSH17.as_usize()] = eval_push17 as _;
-	table[Opcode::PUSH18.as_usize()] = eval_push18 as _;
-	table[Opcode::PUSH19.as_usize()] = eval_push19 as _;
-	table[Opcode::PUSH20.as_usize()] = eval_push20 as _;
-	table[Opcode::PUSH21.as_usize()] = eval_push21 as _;
-	table[Opcode::PUSH22.as_usize()] = eval_push22 as _;
-	table[Opcode::PUSH23.as_usize()] = eval_push23 as _;
-	table[Opcode::PUSH24.as_usize()] = eval_push24 as _;
-	table[Opcode::PUSH25.as_usize()] = eval_push25 as _;
-	table[Opcode::PUSH26.as_usize()] = eval_push26 as _;
-	table[Opcode::PUSH27.as_usize()] = eval_push27 as _;
-	table[Opcode::PUSH28.as_usize()] = eval_push28 as _;
-	table[Opcode::PUSH29.as_usize()] = eval_push29 as _;
-	table[Opcode::PUSH30.as_usize()] = eval_push30 as _;
-	table[Opcode::PUSH31.as_usize()] = eval_push31 as _;
-	table[Opcode::PUSH32.as_usize()] = eval_push32 as _;
+	table[Opcode::PUSH1.as_usize()] = PUSH1.concrete as _;
+	table[Opcode::PUSH2.as_usize()] = PUSH2.concrete as _;
+	table[Opcode::PUSH3.as_usize()] = PUSH3.concrete as _;
+	table[Opcode::PUSH4.as_usize()] = PUSH4.concrete as _;
+	table[Opcode::PUSH5.as_usize()] = PUSH5.concrete as _;
+	table[Opcode::PUSH6.as_usize()] = PUSH6.concrete as _;
+	table[Opcode::PUSH7.as_usize()] = PUSH7.concrete as _;
+	table[Opcode::PUSH8.as_usize()] = PUSH8.concrete as _;
+	table[Opcode::PUSH9.as_usize()] = PUSH9.concrete as _;
+	table[Opcode::PUSH10.as_usize()] = PUSH10.concrete as _;
+	table[Opcode::PUSH11.as_usize()] = PUSH11.concrete as _;
+	table[Opcode::PUSH12.as_usize()] = PUSH12.concrete as _;
+	table[Opcode::PUSH13.as_usize()] = PUSH13.concrete as _;
+	table[Opcode::PUSH14.as_usize()] = PUSH14.concrete as _;
+	table[Opcode::PUSH15.as_usize()] = PUSH15.concrete as _;
+	table[Opcode::PUSH16.as_usize()] = PUSH16.concrete as _;
+	table[Opcode::PUSH17.as_usize()] = PUSH17.concrete as _;
+	table[Opcode::PUSH18.as_usize()] = PUSH18.concrete as _;
+	table[Opcode::PUSH19.as_usize()] = PUSH19.concrete as _;
+	table[Opcode::PUSH20.as_usize()] = PUSH20.concrete as _;
+	table[Opcode::PUSH21.as_usize()] = PUSH21.concrete as _;
+	table[Opcode::PUSH22.as_usize()] = PUSH22.concrete as _;
+	table[Opcode::PUSH23.as_usize()] = PUSH23.concrete as _;
+	table[Opcode::PUSH24.as_usize()] = PUSH24.concrete as _;
+	table[Opcode::PUSH25.as_usize()] = PUSH25.concrete as _;
+	table[Opcode::PUSH26.as_usize()] = PUSH26.concrete as _;
+	table[Opcode::PUSH27.as_usize()] = PUSH27.concrete as _;
+	table[Opcode::PUSH28.as_usize()] = PUSH28.concrete as _;
+	table[Opcode::PUSH29.as_usize()] = PUSH29.concrete as _;
+	table[Opcode::PUSH30.as_usize()] = PUSH30.concrete as _;
+	table[Opcode::PUSH31.as_usize()] = PUSH31.concrete as _;
+	table[Opcode::PUSH32.as_usize()] = PUSH32.concrete as _;
 
 	table[Opcode::DUP1.as_usize()] = DUP1.concrete as _;
 	table[Opcode::DUP2.as_usize()] = DUP2.concrete as _;
@@ -547,7 +452,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8> = {
 	table
 };
 
-pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
+pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte, SymByte> = {
 	let mut table = [EXTERNAL.symbolic as _; 256];
 
 	table[Opcode::STOP.as_usize()] = STOP.symbolic as _;
@@ -591,38 +496,38 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte> = {
 	table[Opcode::MSIZE.as_usize()] = MSIZE.symbolic as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.symbolic as _;
 
-	// TODO -- PUSH1
-	// TODO -- PUSH2
-	// TODO -- PUSH3
-	// TODO -- PUSH4
-	// TODO -- PUSH5
-	// TODO -- PUSH6
-	// TODO -- PUSH7
-	// TODO -- PUSH8
-	// TODO -- PUSH9
-	// TODO -- PUSH10
-	// TODO -- PUSH11
-	// TODO -- PUSH12
-	// TODO -- PUSH13
-	// TODO -- PUSH14
-	// TODO -- PUSH15
-	// TODO -- PUSH16
-	// TODO -- PUSH17
-	// TODO -- PUSH18
-	// TODO -- PUSH19
-	// TODO -- PUSH20
-	// TODO -- PUSH21
-	// TODO -- PUSH22
-	// TODO -- PUSH23
-	// TODO -- PUSH24
-	// TODO -- PUSH25
-	// TODO -- PUSH26
-	// TODO -- PUSH27
-	// TODO -- PUSH28
-	// TODO -- PUSH29
-	// TODO -- PUSH30
-	// TODO -- PUSH31
-	// TODO -- PUSH32
+	table[Opcode::PUSH1.as_usize()] = PUSH1.symbolic as _;
+	table[Opcode::PUSH2.as_usize()] = PUSH2.symbolic as _;
+	table[Opcode::PUSH3.as_usize()] = PUSH3.symbolic as _;
+	table[Opcode::PUSH4.as_usize()] = PUSH4.symbolic as _;
+	table[Opcode::PUSH5.as_usize()] = PUSH5.symbolic as _;
+	table[Opcode::PUSH6.as_usize()] = PUSH6.symbolic as _;
+	table[Opcode::PUSH7.as_usize()] = PUSH7.symbolic as _;
+	table[Opcode::PUSH8.as_usize()] = PUSH8.symbolic as _;
+	table[Opcode::PUSH9.as_usize()] = PUSH9.symbolic as _;
+	table[Opcode::PUSH10.as_usize()] = PUSH10.symbolic as _;
+	table[Opcode::PUSH11.as_usize()] = PUSH11.symbolic as _;
+	table[Opcode::PUSH12.as_usize()] = PUSH12.symbolic as _;
+	table[Opcode::PUSH13.as_usize()] = PUSH13.symbolic as _;
+	table[Opcode::PUSH14.as_usize()] = PUSH14.symbolic as _;
+	table[Opcode::PUSH15.as_usize()] = PUSH15.symbolic as _;
+	table[Opcode::PUSH16.as_usize()] = PUSH16.symbolic as _;
+	table[Opcode::PUSH17.as_usize()] = PUSH17.symbolic as _;
+	table[Opcode::PUSH18.as_usize()] = PUSH18.symbolic as _;
+	table[Opcode::PUSH19.as_usize()] = PUSH19.symbolic as _;
+	table[Opcode::PUSH20.as_usize()] = PUSH20.symbolic as _;
+	table[Opcode::PUSH21.as_usize()] = PUSH21.symbolic as _;
+	table[Opcode::PUSH22.as_usize()] = PUSH22.symbolic as _;
+	table[Opcode::PUSH23.as_usize()] = PUSH23.symbolic as _;
+	table[Opcode::PUSH24.as_usize()] = PUSH24.symbolic as _;
+	table[Opcode::PUSH25.as_usize()] = PUSH25.symbolic as _;
+	table[Opcode::PUSH26.as_usize()] = PUSH26.symbolic as _;
+	table[Opcode::PUSH27.as_usize()] = PUSH27.symbolic as _;
+	table[Opcode::PUSH28.as_usize()] = PUSH28.symbolic as _;
+	table[Opcode::PUSH29.as_usize()] = PUSH29.symbolic as _;
+	table[Opcode::PUSH30.as_usize()] = PUSH30.symbolic as _;
+	table[Opcode::PUSH31.as_usize()] = PUSH31.symbolic as _;
+	table[Opcode::PUSH32.as_usize()] = PUSH32.symbolic as _;
 
 	table[Opcode::DUP1.as_usize()] = DUP1.symbolic as _;
 	table[Opcode::DUP2.as_usize()] = DUP2.symbolic as _;

@@ -1,3 +1,5 @@
+use crate::symbolic::SymByte;
+
 /// Opcode enum. One-to-one corresponding to an `u8` value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Opcode(pub u8);
@@ -260,4 +262,19 @@ impl Opcode {
 	pub const fn as_usize(&self) -> usize {
 		self.0 as usize
 	}
+}
+
+impl From<u8> for Opcode {
+    fn from(x: u8) -> Self {
+		Opcode(x)
+    }
+}
+
+impl From<SymByte> for Opcode {
+    fn from(x: SymByte) -> Self {
+		match x {
+			SymByte::Concrete(x) => Opcode::from(x),
+			_ => panic!("can only create opcode from concrete byte")
+		}
+    }
 }

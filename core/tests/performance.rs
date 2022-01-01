@@ -1,5 +1,4 @@
 use evm_core::{Capture, ExitSucceed, ConcreteMachine};
-use std::rc::Rc;
 
 macro_rules! ret_test {
 	( $name:ident, $code:expr, $data:expr, $ret:expr ) => {
@@ -8,7 +7,7 @@ macro_rules! ret_test {
 			let code = hex::decode($code).unwrap();
 			let data = hex::decode($data).unwrap();
 
-			let mut vm = ConcreteMachine::new(Rc::new(code), data, 1024, 10000);
+			let mut vm = ConcreteMachine::new(code, data, 1024, 10000);
 			assert_eq!(vm.run(), Capture::Exit(ExitSucceed::Returned.into()));
 			assert_eq!(vm.return_value(), hex::decode($ret).unwrap());
 		}

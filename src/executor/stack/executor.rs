@@ -6,7 +6,6 @@ use crate::{
 };
 use alloc::{
 	collections::{BTreeMap, BTreeSet},
-	rc::Rc,
 	vec::Vec,
 };
 use core::{cmp::min, convert::Infallible};
@@ -704,7 +703,7 @@ impl<'config, 'precompiles, S: StackState<'config>, P: PrecompileSet>
 		}
 
 		let mut runtime = Runtime::new(
-			Rc::new(init_code),
+			init_code,
 			Vec::new(),
 			context,
 			self.config,
@@ -905,7 +904,7 @@ impl<'config, 'precompiles, S: StackState<'config>, P: PrecompileSet>
 			};
 		}
 
-		let mut runtime = Runtime::new(Rc::new(code), input, context, self.config);
+		let mut runtime = Runtime::new(code, input, context, self.config);
 
 		let reason = self.execute(&mut runtime);
 		log::debug!(target: "evm", "Call execution using address {}: {:?}", code_address, reason);

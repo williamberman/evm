@@ -1,7 +1,7 @@
 use super::Control;
 use crate::{
-	memory::MemoryItem, stack::StackItem, ConcreteMachine, ExitError, ExitFatal, ExitRevert,
-	ExitSucceed, Machine,
+	memory::MemoryItem, stack::StackItem, CodeItem, ConcreteMachine, ExitError, ExitFatal,
+	ExitRevert, ExitSucceed, Machine,
 };
 use core::cmp::min;
 use primitive_types::{H256, U256};
@@ -166,8 +166,8 @@ pub fn push(state: &mut ConcreteMachine, n: usize, position: usize) -> Control {
 }
 
 #[inline]
-pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	n: usize,
 ) -> Control {
 	let value = match state.stack.peek(n - 1) {
@@ -179,8 +179,8 @@ pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
 }
 
 #[inline]
-pub fn swap<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem>(
-	state: &mut Machine<IStackItem, ICalldata, IMemoryItem>,
+pub fn swap<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>(
+	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	n: usize,
 ) -> Control {
 	let val1 = match state.stack.peek(0) {
@@ -225,7 +225,7 @@ pub mod sym {
 
 	use crate::{
 		eval::{htu, uth, Control},
-		symbolic::{SymByte, SymWord},
+		symbolic::{extract_bytes_to_word, SymByte, SymWord},
 		ExitError, ExitFatal, SymbolicMachine,
 	};
 
@@ -246,11 +246,7 @@ pub mod sym {
 			_ => panic!("cannot use symbolic args for CODECOPY"),
 		};
 
-		let code: Vec<SymByte> = state
-			.code
-			.iter()
-			.map(|x| SymByte::Concrete(x.clone()))
-			.collect();
+		let code: Vec<SymByte> = state.code.iter().map(|x| x.clone()).collect();
 
 		try_or_fail!(state.memory.resize_offset(memory_offset, len));
 		match state
@@ -435,5 +431,21 @@ pub mod sym {
 			Ok(()) => Control::Continue(1),
 			Err(e) => Control::Exit(e.into()),
 		}
+	}
+
+	pub fn push(state: &mut SymbolicMachine, n: usize, position: usize) -> Control {
+		let read_from_offset = position + 1;
+
+		let extract_n_bytes = if read_from_offset + n > state.code.len() {
+			state.code.len() - read_from_offset
+		} else {
+			n
+		};
+
+		let ret = extract_bytes_to_word(&state.code, read_from_offset, extract_n_bytes, false);
+
+		push!(state, ret);
+
+		Control::Continue(1 + n)
 	}
 }

@@ -33,7 +33,6 @@ pub use crate::context::{CallScheme, Context, CreateScheme};
 pub use crate::handler::{Handler, Transfer};
 pub use crate::interrupt::{Resolve, ResolveCall, ResolveCreate};
 
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 
 macro_rules! step {
@@ -117,7 +116,7 @@ pub struct Runtime<'config> {
 impl<'config> Runtime<'config> {
 	/// Create a new runtime with given code and data.
 	pub fn new(
-		code: Rc<Vec<u8>>,
+		code: Vec<u8>,
 		data: Vec<u8>,
 		context: Context,
 		config: &'config Config,

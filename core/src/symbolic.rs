@@ -3,11 +3,11 @@
 use std::{convert::TryFrom, fmt::Display, ops::Deref};
 
 use amzn_smt_ir::{
-	logic::ALL, Binary, Command, Constant, Decimal, Hexadecimal, IConst, ISort, ISymbol, Numeral,
-	Script, Term,
+	logic::{BvOp, ALL},
+	Binary, Command, Constant, Decimal, Hexadecimal, IConst, ISort, ISymbol, Numeral, Script, Term,
 };
 use num::{self, bigint::ToBigUint};
-use primitive_types::{H256, U256, H512};
+use primitive_types::{H256, H512, U256};
 
 use crate::eval::uth;
 
@@ -39,7 +39,7 @@ pub fn bv_constant_from_h256(x: &H256) -> Term<ALL> {
 }
 
 pub fn bv_constant_from_u256(x: &U256) -> Term<ALL> {
-    bv_constant_from_h256(&uth(x))
+	bv_constant_from_h256(&uth(x))
 }
 
 pub fn bv_constant_from_h512(x: &H512) -> Term<ALL> {
@@ -109,9 +109,7 @@ pub fn bv_256_n(i: u8) -> Term<ALL> {
 }
 
 pub fn bv_8_n(i: u8) -> Term<ALL> {
-	let mut x: [u8; 2] = [
-		0, 0,
-	];
+	let mut x: [u8; 2] = [0, 0];
 
 	// split `i` into nibbles.
 	// `i` is one byte so will only be two nibbles.
@@ -323,5 +321,55 @@ impl From<&Term> for Native {
 				panic!("{} {:?}", "Cannot convert non-term into native", t)
 			}
 		}
+	}
+}
+
+pub fn extract_bytes_to_word(
+	symbytes: &[SymByte],
+	read_from_offset: usize,
+	extract_n_bytes: usize,
+	read_zeroes_beyond_end: bool,
+) -> SymWord {
+	let mut all_concrete = true;
+	let mut concrete_bytes = [0_u8; 32];
+	let mut term: Term;
+
+	let write_into_offset = 32 - extract_n_bytes;
+
+	let mut f = |nth_byte: usize| -> Term {
+		let read_from_index = read_from_offset + nth_byte;
+
+		if read_from_index >= symbytes.len() {
+			if read_zeroes_beyond_end {
+				return bv_8_n(0);
+			} else {
+				panic!("extracted beyond end")
+			}
+		}
+
+		match symbytes[read_from_index].clone() {
+			SymByte::Concrete(byte) => {
+				concrete_bytes[write_into_offset + nth_byte] = byte;
+				bv_8_n(byte)
+			}
+			SymByte::Symbolic(t) => {
+				all_concrete = false;
+				t
+			}
+		}
+	};
+
+	term = f(0);
+
+	#[allow(clippy::needless_range_loop)]
+	for write_into_index in 1..32 {
+		let t = f(write_into_index);
+		term = BvOp::Concat(term, t).into()
+	}
+
+	if all_concrete {
+		SymWord::Concrete(H256::from_slice(&concrete_bytes))
+	} else {
+		SymWord::Symbolic(term)
 	}
 }

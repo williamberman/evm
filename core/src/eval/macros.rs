@@ -321,3 +321,16 @@ macro_rules! same_op {
 		};
 	};
 }
+
+macro_rules! push_op {
+	( $name:ident, $n:literal ) => {
+		static $name: OpEvals = OpEvals {
+			concrete: |state: &mut ConcreteMachine, _opcode: Opcode, position: usize| -> Control {
+				self::misc::push(state, $n, position)
+			},
+			symbolic: |state: &mut SymbolicMachine, _opcode: Opcode, position: usize| -> Control {
+				self::misc::sym::push(state, $n, position)
+			},
+		};
+	};
+}

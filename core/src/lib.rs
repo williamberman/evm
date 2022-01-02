@@ -25,6 +25,7 @@ pub use crate::valids::Valids;
 
 use crate::eval::Control;
 use alloc::vec::Vec;
+use amzn_smt_ir::Term;
 use core::ops::Range;
 use eval::{DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
 use memory::{ConcreteMemory, MemoryItem, SymbolicMemory};
@@ -41,8 +42,17 @@ pub trait CodeItem: Into<Opcode> + Clone {}
 impl CodeItem for SymByte {}
 impl CodeItem for u8 {}
 
+pub trait Calldata: Clone {}
+impl<T: Clone> Calldata for T {}
+
 /// Core execution layer for EVM.
-pub struct Machine<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem> {
+#[derive(Clone)]
+pub struct Machine<
+	IStackItem: StackItem,
+	ICalldata: Calldata,
+	IMemoryItem: MemoryItem,
+	ICodeItem: CodeItem,
+> {
 	/// Program data.
 	data: ICalldata,
 	/// Program code.
@@ -59,6 +69,9 @@ pub struct Machine<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, IC
 	stack: Stack<IStackItem>,
 
 	table: DispatchTable<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
+
+	// TODO not used on concrete machine
+	constraints: Vec<Term>,
 }
 
 impl ConcreteMachine {
@@ -73,6 +86,53 @@ impl ConcreteMachine {
 			valids,
 			CONCRETE_TABLE,
 		)
+	}
+
+	/// Loop stepping the machine, until it stops.
+	pub fn run(&mut self) -> Capture<ExitReason, Trap> {
+		loop {
+			match self.step() {
+				Ok(()) => (),
+				Err(res) => return res,
+			}
+		}
+	}
+
+	#[inline]
+	/// Step the machine, executing one opcode. It then returns.
+	pub fn step(&mut self) -> Result<(), Capture<ExitReason, Trap>> {
+		let position = *self
+			.position
+			.as_ref()
+			.map_err(|reason| Capture::Exit(reason.clone()))?;
+
+		match self.code.get(position).map(|v| {
+			let v: Opcode = (*v).clone().into();
+			v
+		}) {
+			Some(opcode) => match self.table[opcode.as_usize()](self, opcode, position) {
+				Control::Continue(p) => {
+					self.position = Ok(position + p);
+					Ok(())
+				}
+				Control::Exit(e) => {
+					self.position = Err(e.clone());
+					Err(Capture::Exit(e))
+				}
+				Control::Jump(p) => {
+					self.position = Ok(p);
+					Ok(())
+				}
+				Control::Trap(opcode) => {
+					self.position = Ok(position + 1);
+					Err(Capture::Trap(opcode))
+				}
+			},
+			None => {
+				self.position = Err(ExitSucceed::Stopped.into());
+				Err(Capture::Exit(ExitSucceed::Stopped.into()))
+			}
+		}
 	}
 }
 
@@ -94,9 +154,78 @@ impl SymbolicMachine {
 			SYMBOLIC_TABLE,
 		)
 	}
+
+	#[inline]
+	pub fn step(&mut self) -> (Result<(), Capture<ExitReason, Trap>>, Vec<(Self, Result<(), Capture<ExitReason, Trap>>)>) {
+		let position = self
+			.position
+			.as_ref()
+			.map_err(|reason| Capture::Exit(reason.clone()));
+
+		let position = match position {
+			Ok(position) => *position,
+			Err(e) => return (Err(e), vec![]),
+		};
+
+		match self.code.get(position).map(|v| { 
+			let v: Opcode = (*v).clone().into();
+			v
+		}) {
+			Some(opcode) => {
+				if opcode == Opcode::JUMPI {
+					let (control, fork) = self::eval::misc::sym::jumpi(self);
+					let fst = self.process_control(control);
+
+					match fork {
+						Some((mut other_machine, other_control)) => {
+							let snd = other_machine.process_control(other_control);
+							(fst, vec![(other_machine, snd)])
+						}
+						None => (fst, vec![])
+					}
+				} else {
+					let control = self.table[opcode.as_usize()](self, opcode, position);
+					(self.process_control(control), vec![])
+				}
+			}
+			None => {
+				self.position = Err(ExitSucceed::Stopped.into());
+				(Err(Capture::Exit(ExitSucceed::Stopped.into())), vec![])
+			}
+		}
+	}
+
+	pub fn process_control(
+		&mut self,
+		c: Control,
+	) -> Result<(), Capture<ExitReason, Trap>> {
+		let position = *self
+			.position
+			.as_ref()
+			.map_err(|reason| Capture::Exit(reason.clone()))?;
+
+		match c {
+			Control::Continue(p) => {
+				self.position = Ok(position + p);
+				Ok(())
+			}
+			Control::Exit(e) => {
+				self.position = Err(e.clone());
+				Err(Capture::Exit(e))
+			}
+			Control::Jump(p) => {
+				self.position = Ok(p);
+				Ok(())
+			}
+			Control::Trap(opcode) => {
+				self.position = Ok(position + 1);
+				Err(Capture::Trap(opcode))
+			}
+		}
+	}
 }
 
-impl<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>
+impl<IStackItem: StackItem, ICalldata: Calldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>
 	Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>
 {
 	/// Reference of machine stack.
@@ -138,6 +267,7 @@ impl<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeI
 			memory,
 			stack: Stack::new(stack_limit),
 			table,
+			constraints: Vec::new(),
 		}
 	}
 
@@ -182,50 +312,6 @@ impl<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeI
 			)
 		}
 	}
-
-	/// Loop stepping the machine, until it stops.
-	pub fn run(&mut self) -> Capture<ExitReason, Trap> {
-		loop {
-			match self.step() {
-				Ok(()) => (),
-				Err(res) => return res,
-			}
-		}
-	}
-
-	#[inline]
-	/// Step the machine, executing one opcode. It then returns.
-	pub fn step(&mut self) -> Result<(), Capture<ExitReason, Trap>> {
-		let position = *self
-			.position
-			.as_ref()
-			.map_err(|reason| Capture::Exit(reason.clone()))?;
-
-		match self.code.get(position).map(|v| (*v).clone().into()) {
-			Some(opcode) => match self.table[opcode.as_usize()](self, opcode, position) {
-				Control::Continue(p) => {
-					self.position = Ok(position + p);
-					Ok(())
-				}
-				Control::Exit(e) => {
-					self.position = Err(e.clone());
-					Err(Capture::Exit(e))
-				}
-				Control::Jump(p) => {
-					self.position = Ok(p);
-					Ok(())
-				}
-				Control::Trap(opcode) => {
-					self.position = Ok(position + 1);
-					Err(Capture::Trap(opcode))
-				}
-			},
-			None => {
-				self.position = Err(ExitSucceed::Stopped.into());
-				Err(Capture::Exit(ExitSucceed::Stopped.into()))
-			}
-		}
-	}
 }
 
 #[cfg(test)]
@@ -254,7 +340,7 @@ mod tests {
 		m.stack_mut().push(SymWord::Concrete(a)).unwrap();
 		m.stack_mut().push(SymWord::Concrete(b)).unwrap();
 
-		m.step().unwrap();
+		m.step().0.unwrap();
 
 		assert_eq!(
 			m.stack().peek(0).unwrap(),
@@ -278,7 +364,7 @@ mod tests {
 		m.stack_mut().push(SymWord::Concrete(a)).unwrap();
 		m.stack_mut().push(SymWord::Symbolic(b.clone())).unwrap();
 
-		m.step().unwrap();
+		m.step().0.unwrap();
 
 		assert_eq!(
 			m.stack().peek(0).unwrap(),

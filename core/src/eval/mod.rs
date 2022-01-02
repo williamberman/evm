@@ -2,7 +2,7 @@
 mod macros;
 mod arithmetic;
 mod bitwise;
-mod misc;
+pub mod misc;
 
 use crate::{
 	symbolic::{self, bv_256_one, bv_256_zero, SymByte, SymWord},
@@ -506,7 +506,9 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte, Sym
 	table[Opcode::MSTORE.as_usize()] = MSTORE.symbolic as _;
 	table[Opcode::MSTORE8.as_usize()] = MSTORE8.symbolic as _;
 	table[Opcode::JUMP.as_usize()] = JUMP.symbolic as _;
-	// TODO -- JUMPI
+	// JUMPI -- handled in the `step` function. It is the only function
+	// which potentially returns additional machines and so has a different
+	// signature than the rest of the opcodes in the dispatch table.
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
 	table[Opcode::MSIZE.as_usize()] = MSIZE.symbolic as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.symbolic as _;

@@ -1,7 +1,7 @@
 use super::Control;
 use crate::{
-	memory::MemoryItem, stack::StackItem, CodeItem, ConcreteMachine, ExitError, ExitFatal,
-	ExitRevert, ExitSucceed, Machine,
+	memory::MemoryItem, stack::StackItem, Calldata, CodeItem, ConcreteMachine, ExitError,
+	ExitFatal, ExitRevert, ExitSucceed, Machine,
 };
 use core::cmp::min;
 use primitive_types::{H256, U256};
@@ -166,7 +166,12 @@ pub fn push(state: &mut ConcreteMachine, n: usize, position: usize) -> Control {
 }
 
 #[inline]
-pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>(
+pub fn dup<
+	IStackItem: StackItem,
+	ICalldata: Calldata,
+	IMemoryItem: MemoryItem,
+	ICodeItem: CodeItem,
+>(
 	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	n: usize,
 ) -> Control {
@@ -179,7 +184,12 @@ pub fn dup<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem:
 }
 
 #[inline]
-pub fn swap<IStackItem: StackItem, ICalldata, IMemoryItem: MemoryItem, ICodeItem: CodeItem>(
+pub fn swap<
+	IStackItem: StackItem,
+	ICalldata: Calldata,
+	IMemoryItem: MemoryItem,
+	ICodeItem: CodeItem,
+>(
 	state: &mut Machine<IStackItem, ICalldata, IMemoryItem, ICodeItem>,
 	n: usize,
 ) -> Control {
@@ -219,13 +229,14 @@ pub fn revert(state: &mut ConcreteMachine) -> Control {
 }
 
 pub mod sym {
-	use amzn_smt_ir::{logic::BvOp, Index};
+	use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
 	use num::bigint::ToBigUint;
-	use primitive_types::U256;
+	use primitive_types::{H256, U256};
+	use smallvec::smallvec;
 
 	use crate::{
 		eval::{htu, uth, Control},
-		symbolic::{extract_bytes_to_word, SymByte, SymWord},
+		symbolic::{bv_256_one, bv_256_zero, extract_bytes_to_word, SymByte, SymWord},
 		ExitError, ExitFatal, ExitRevert, ExitSucceed, SymbolicMachine,
 	};
 
@@ -474,5 +485,63 @@ pub mod sym {
 		state.return_range = start..(start + len);
 
 		Control::Exit(ExitRevert::Reverted.into())
+	}
+
+	pub fn jumpi(state: &mut SymbolicMachine) -> (Control, Option<(SymbolicMachine, Control)>) {
+		let dest = match state.stack.pop() {
+			Ok(value) => value,
+			Err(e) => return (Control::Exit(e.into()), None)
+		};
+
+		let value = match state.stack.pop() {
+			Ok(value) => value,
+			Err(e) => return (Control::Exit(e.into()), None)
+		};
+
+		let dest = match dest {
+			SymWord::Concrete(dest) => htu(&dest),
+			SymWord::Symbolic(_) => panic!("cannot use symbolic dest for JUMPI"),
+		};
+
+		if dest > U256::from(usize::MAX) {
+			return (Control::Exit(ExitError::InvalidJump.into()), None)
+		}
+
+		let dest = dest.as_usize();
+
+		match value {
+			SymWord::Concrete(value) => {
+				let c = if value != H256::zero() {
+					if state.valids.is_valid(dest) {
+						Control::Jump(dest)
+					} else {
+						Control::Exit(ExitError::InvalidJump.into())
+					}
+				} else {
+					Control::Continue(1)
+				};
+
+				(c, None)
+			}
+			SymWord::Symbolic(value) => {
+				let mut takes_jump = state.clone();
+
+				takes_jump
+					.constraints
+					.push(CoreOp::Eq(smallvec![value.clone(), bv_256_zero()]).into());
+
+				let takes_jump_c = if state.valids.is_valid(dest) {
+					Control::Jump(dest)
+				} else {
+					Control::Exit(ExitError::InvalidJump.into())
+				};
+
+				state
+					.constraints
+					.push(CoreOp::Eq(smallvec![value, bv_256_one()]).into());
+
+				(Control::Continue(1), Some((takes_jump, takes_jump_c)))
+			}
+		}
 	}
 }

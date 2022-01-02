@@ -19,6 +19,7 @@ use smallvec::smallvec;
 /// (declare-const n-calldata-bytes (_ BitVec 256))
 /// (assert (forall ((x (_ BitVec 256))) (=> (bvuge x n-calldata-bytes) (= (calldata x) #x00))))
 /// ```
+#[derive(Clone)]
 pub struct SymbolicCalldata {
 	pub n_bytes: SymWord,
 	elements: Vec<(U256, u8)>,

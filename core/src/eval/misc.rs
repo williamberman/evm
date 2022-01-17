@@ -487,28 +487,6 @@ pub mod sym {
 		Control::Exit(ExitRevert::Reverted.into())
 	}
 
-	enum J {
-		Takes,
-		Not,
-	}
-
-	// TODO(will) remove and instead know the 
-	// exit code to look for
-	static JS: [J; 12] = [
-		J::Takes,
-		J::Not,
-		J::Takes,
-		J::Takes,
-		J::Takes,
-		J::Takes,
-		J::Not,
-		J::Not,
-		J::Not,
-		J::Takes,
-		J::Takes,
-		J::Not,
-	];
-
 	pub enum SymJumpResult {
 		Concrete {
 			control: Control,
@@ -522,9 +500,6 @@ pub mod sym {
 	}
 
 	pub fn jumpi(state: &mut SymbolicMachine) -> SymJumpResult {
-		let j = JS.get(state.jumps).unwrap();
-		state.jumps += 1;
-
 		let dest = match state.stack.pop() {
 			Ok(value) => value,
 			Err(e) => {
@@ -577,27 +552,13 @@ pub mod sym {
 				};
 			}
 			SymWord::Symbolic(value) => {
-				let (control, takes_jump) = match j {
-					J::Takes => {
-						(take_jump(state, dest, value), true)
-					}
-					J::Not => {
-						(no_take_jump(state, value), false)
-					}
-				};
+				let mut takes_jump = state.clone();
+				let takes_jump_c = take_jump(&mut takes_jump, dest, value.clone());
 
-				SymJumpResult::Concrete {
-					control,
-					takes_jump
+				SymJumpResult::Symbolic {
+					does_not_take_jump: no_take_jump(state, value),
+					does_take_jump: (takes_jump, takes_jump_c),
 				}
-
-				// let mut takes_jump = state.clone();
-				// let takes_jump_c = take_jump(&mut takes_jump, dest, value.clone());
-
-				// SymJumpResult::Symbolic {
-				// 	does_not_take_jump: no_take_jump(state, value),
-				// 	does_take_jump: (takes_jump, takes_jump_c),
-				// }
 			}
 		}
 	}

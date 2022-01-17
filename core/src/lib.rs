@@ -30,12 +30,12 @@ use alloc::vec::Vec;
 use amzn_smt_ir::logic::ALL;
 use amzn_smt_ir::{Command, CoreOp, Identifier, Index, Script, Sort, Term, UF};
 use core::ops::Range;
-use std::convert::TryFrom;
 pub use eval::{htu, uth, DispatchTable, CONCRETE_TABLE, SYMBOLIC_TABLE};
 use memory::{ConcreteMemory, MemoryItem, SymbolicMemory};
 use num::bigint::ToBigUint;
 use primitive_types::{H256, U256};
 use stack::StackItem;
+use std::convert::TryFrom;
 use symbolic::bv_256_n;
 pub use symbolic_calldata::SymbolicCalldata;
 
@@ -79,8 +79,6 @@ pub struct Machine<
 
 	// TODO not used on concrete machine
 	pub constraints: Vec<Term>,
-
-	jumps: usize,
 }
 
 impl ConcreteMachine {
@@ -141,6 +139,32 @@ impl ConcreteMachine {
 				self.position = Err(ExitSucceed::Stopped.into());
 				Err(Capture::Exit(ExitSucceed::Stopped.into()))
 			}
+		}
+	}
+
+	/// Copy and get the return value of the machine, if any.
+	pub fn return_value(&self) -> Vec<u8> {
+		if self.return_range.start > U256::from(usize::MAX) {
+			let mut ret = Vec::new();
+			ret.resize(
+				(self.return_range.end - self.return_range.start).as_usize(),
+				self.memory.default_value.clone(),
+			);
+			ret
+		} else if self.return_range.end > U256::from(usize::MAX) {
+			let mut ret = self.memory.get(
+				self.return_range.start.as_usize(),
+				usize::MAX - self.return_range.start.as_usize(),
+			);
+			while ret.len() < (self.return_range.end - self.return_range.start).as_usize() {
+				ret.push(self.memory.default_value.clone());
+			}
+			ret
+		} else {
+			self.memory.get(
+				self.return_range.start.as_usize(),
+				(self.return_range.end - self.return_range.start).as_usize(),
+			)
 		}
 	}
 }
@@ -297,7 +321,7 @@ impl SymbolicMachine {
 			panic!("need concrete length")
 		};
 
-		let mut rv = vec![0_u8;nb];
+		let mut rv = vec![0_u8; nb];
 
 		rv[0] = self.data.get_byte(0);
 		rv[1] = self.data.get_byte(1);
@@ -359,10 +383,7 @@ impl SymbolicMachine {
 				terms: vec![
 					// Temp to avoid parsing returned calldata as array
 					// Term::Variable("calldata".into())
-					a.0,
-					b.0,
-					c.0,
-					d.0,
+					a.0, b.0, c.0, d.0,
 				],
 			},
 			Command::Exit,
@@ -395,13 +416,41 @@ impl SymbolicMachine {
 		let t = Term::Variable(s.into());
 
 		let xeq: Command<Term> = Command::Assert {
-			term: CoreOp::Eq(smallvec![
-				t.clone(),
-				uf
-			]).into(),
+			term: CoreOp::Eq(smallvec![t.clone(), uf]).into(),
 		};
 
 		(t, decl, xeq)
+	}
+
+	pub fn return_value(&self) -> Vec<u8> {
+		let syms = if self.return_range.start > U256::from(usize::MAX) {
+			let mut ret = Vec::new();
+			ret.resize(
+				(self.return_range.end - self.return_range.start).as_usize(),
+				self.memory.default_value.clone(),
+			);
+			ret
+		} else if self.return_range.end > U256::from(usize::MAX) {
+			let mut ret = self.memory.get(
+				self.return_range.start.as_usize(),
+				usize::MAX - self.return_range.start.as_usize(),
+			);
+			while ret.len() < (self.return_range.end - self.return_range.start).as_usize() {
+				ret.push(self.memory.default_value.clone());
+			}
+			ret
+		} else {
+			self.memory.get(
+				self.return_range.start.as_usize(),
+				(self.return_range.end - self.return_range.start).as_usize(),
+			)
+		};
+		syms.into_iter()
+			.map(|x| match x {
+				symbolic::Sym::Concrete(x) => x,
+				symbolic::Sym::Symbolic(_) => panic!("need concrete return value"),
+			})
+			.collect()
 	}
 }
 
@@ -448,7 +497,6 @@ impl<IStackItem: StackItem, ICalldata: Calldata, IMemoryItem: MemoryItem, ICodeI
 			stack: Stack::new(stack_limit),
 			table,
 			constraints: Vec::new(),
-			jumps: 0,
 		}
 	}
 
@@ -467,32 +515,6 @@ impl<IStackItem: StackItem, ICalldata: Calldata, IMemoryItem: MemoryItem, ICodeI
 			.get(position)
 			.map(|v| ((*v).clone().into(), &self.stack))
 	}
-
-	/// Copy and get the return value of the machine, if any.
-	pub fn return_value(&self) -> Vec<IMemoryItem> {
-		if self.return_range.start > U256::from(usize::MAX) {
-			let mut ret = Vec::new();
-			ret.resize(
-				(self.return_range.end - self.return_range.start).as_usize(),
-				self.memory.default_value.clone(),
-			);
-			ret
-		} else if self.return_range.end > U256::from(usize::MAX) {
-			let mut ret = self.memory.get(
-				self.return_range.start.as_usize(),
-				usize::MAX - self.return_range.start.as_usize(),
-			);
-			while ret.len() < (self.return_range.end - self.return_range.start).as_usize() {
-				ret.push(self.memory.default_value.clone());
-			}
-			ret
-		} else {
-			self.memory.get(
-				self.return_range.start.as_usize(),
-				(self.return_range.end - self.return_range.start).as_usize(),
-			)
-		}
-	}
 }
 
 #[cfg(test)]
@@ -501,7 +523,7 @@ mod tests {
 		symbolic::{bv_constant_from_h256, SymByte},
 		Opcode, SymWord, SymbolicCalldata, SymbolicMachine,
 	};
-	use amzn_smt_ir::{logic::BvOp, Script, Term};
+	use amzn_smt_ir::{logic::BvOp, Term};
 	use primitive_types::H256;
 	use smallvec::smallvec;
 

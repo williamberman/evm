@@ -32,7 +32,6 @@ pub mod executor;
 #[cfg(test)]
 mod tests {
 	use std::collections::BTreeMap;
-
 	use crate::backend::MemoryBackend;
 	use crate::backend::MemoryVicinity;
 	use crate::executor::stack::MemoryStackState;
@@ -41,6 +40,8 @@ mod tests {
 	use crate::Config;
 	use crate::Context;
 	use crate::SymbolicRuntime;
+	use ethers::abi::parse_abi;
+	use ethers::abi::ParamType;
 	use evm_core::SymbolicCalldata;
 	use primitive_types::H160;
 	use primitive_types::U256;
@@ -48,9 +49,46 @@ mod tests {
 	#[test]
 	fn test_data() {
 		let data =
-			SymbolicCalldata::from_function_selector(hex::decode("d5a24249").unwrap(), 2 * 256);
+			SymbolicCalldata::from_function_selector(&hex::decode("d5a24249").unwrap(), 2 * 256);
 
 		println!("{:?}", data.elements);
+	}
+
+	#[test]
+	fn test_parse() {
+		let sig = "factor(uint x, uint y)";
+		let abi = parse_abi(&[&sig])
+			.unwrap()
+			.functions
+			.into_iter()
+			.next()
+			.unwrap()
+			.1[0]
+			.clone();
+		let selector = abi.short_signature();
+		let arg_length = abi.inputs.iter().fold(0, |acc, x| {
+			acc + match x.kind {
+				ParamType::Int(n) => n,
+				ParamType::Uint(n) => n,
+				_ => panic!("TODO unimplemented argument size"),
+			}
+		});
+
+		println!("{:?}", selector);
+		println!("{}", arg_length);
+
+		let cd = hex::decode("d5a2424900000000000000000000000000000000000000000000000000000000000003b900000000000000000000000000000000000000000000000000000000000003fd").unwrap();
+		let xcd = abi.decode_input(&cd[4..]).unwrap();
+		let args = xcd
+			.into_iter()
+			.map(|x| {
+				// Only do string representation of uints for now
+				x.into_uint().unwrap().to_string()
+			})
+			.collect::<Vec<String>>()
+			.join(",");
+
+		println!("{}({})", abi.name, args);
 	}
 
 	#[test]
@@ -59,7 +97,7 @@ mod tests {
 
 		// Symbolic
 		let data =
-			SymbolicCalldata::from_function_selector(hex::decode("d5a24249").unwrap(), 2 * 256);
+			SymbolicCalldata::from_function_selector(&hex::decode("d5a24249").unwrap(), 2 * 256);
 
 		// Fail
 		// let data = SymbolicCalldata::from(hex::decode("d5a2424900000000000000000000000000000000000000000000000000000000000003fd00000000000000000000000000000000000000000000000000000000000003b9").unwrap());
@@ -100,22 +138,14 @@ mod tests {
 
 		rt.run(&mut executor);
 
-		// println!("{}", rt.machines.len());
-
-		// for m in rt.machines.iter() {
-		// 	println!("{:?}", m.borrow().status);
-		// }
-
-		let machine = &rt.machines.get(0).unwrap().borrow_mut().machine;
-
-		// println!("************");
-		// println!("{:?}", machine.return_value());
-		// println!("************");
+		let machine = &rt.find_exit_code(1).unwrap().borrow().machine;
 
 		let cd = machine.solve();
 
-
-		// println!("{}", hex::encode(cd.clone()));
-		assert_eq!(hex::encode(cd.clone()), "d5a2424900000000000000000000000000000000000000000000000000000000000003b900000000000000000000000000000000000000000000000000000000000003fd")
+		assert_eq!(hex::encode(cd.clone()), "d5a2424900000000000000000000000000000000000000000000000000000000000003b900000000000000000000000000000000000000000000000000000000000003fd");
+		assert_eq!(
+			hex::encode(machine.return_value()),
+			"4e487b710000000000000000000000000000000000000000000000000000000000000001"
+		);
 	}
 }

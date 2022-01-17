@@ -24,6 +24,8 @@ scale-info = { version = "1.0.0", default-features = false, features = ["derive"
 auto_impl = "0.5.0"
 hex = "0.4"
 amzn-smt-ir = { git = "https://github.com/awslabs/rust-smt-ir", version = "0.1", branch="main" }
+clap = { version = "3.0.8", features = ["derive"] }
+ethers = "0.6.2"
 
 [dev-dependencies]
 criterion = "0.3"

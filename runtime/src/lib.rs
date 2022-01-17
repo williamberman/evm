@@ -280,18 +280,21 @@ impl<'config> SymbolicRuntime<'config> {
 		}
 	}
 
-	// fn machine_state_mut(&mut self) -> &mut SymbolicMachineState {
-	// 	let len = self.machines.len();
-	// 	self.machines.get(len - 1).unwrap().borrow_mut()
-	// }
-
-	// pub fn machine_mut(&mut self) -> &mut SymbolicMachine {
-	// 	&mut self.machine_state_mut().machine
-	// }
-
 	pub fn unhandled_interrupt(&mut self, state: &mut SymbolicMachineState) {
 		state.status = Err(ExitFatal::UnhandledInterrupt.into());
 		state.machine.exit(ExitFatal::UnhandledInterrupt.into());
+	}
+
+	pub fn find_exit_code(&self, exit_code: u8) -> Option<&RefCell<SymbolicMachineState>> {
+		let buf = hex::decode("4e487b710000000000000000000000000000000000000000000000000000000000000000").unwrap();
+		let len = buf.len();
+		let mut xbuf = buf;
+		xbuf[len - 2] = exit_code / 16;
+		xbuf[len - 1] = exit_code % 16;
+
+		self.machines.iter().find(|m| {
+			m.borrow().machine.return_value() == xbuf
+		})
 	}
 }
 

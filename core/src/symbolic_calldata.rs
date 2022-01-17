@@ -50,12 +50,12 @@ impl Default for SymbolicCalldata {
 static CALLDATA_FUNC_NAME: &str = "calldata";
 
 impl SymbolicCalldata {
-	pub fn from_function_selector(sel: Vec<u8>, arg_length: usize) -> Self {
+	pub fn from_function_selector(sel: &[u8], arg_length: usize) -> Self {
 		let n_bytes = SymWord::Concrete(uth(&U256::from(sel.len() * 8 + arg_length)));
 		let elements = sel
 			.into_iter()
 			.enumerate()
-			.map(|(idx, b)| (U256::from(idx), b))
+			.map(|(idx, b)| (U256::from(idx), b.clone()))
 			.collect();
 
 		return Self { n_bytes, elements };

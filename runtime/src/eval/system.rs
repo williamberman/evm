@@ -459,3 +459,17 @@ pub fn call<H: Handler>(runtime: &mut Runtime, scheme: CallScheme, handler: &mut
 		}
 	}
 }
+
+pub mod sym {
+    use evm_core::{SymWord, uth};
+
+    use crate::{Handler, eval::Control, SymbolicMachineState, SymbolicRuntime};
+
+	pub fn callvalue<H: Handler>(runtime: &SymbolicRuntime, state: &mut SymbolicMachineState) -> Control<H> {
+		let word = SymWord::Concrete(uth(&runtime.context.apparent_value));
+
+		push_sym!(state, word);
+
+		Control::Continue
+	}
+}

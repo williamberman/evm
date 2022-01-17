@@ -1,8 +1,16 @@
+use std::fmt::{self, Debug};
+
 use crate::symbolic::SymByte;
 
 /// Opcode enum. One-to-one corresponding to an `u8` value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Opcode(pub u8);
+
+impl fmt::Display for Opcode {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}({:#02x})", OPCODE_STR_TABLE[self.as_usize()], self.0)
+	}
+}
 
 // Core opcodes.
 impl Opcode {
@@ -265,16 +273,164 @@ impl Opcode {
 }
 
 impl From<u8> for Opcode {
-    fn from(x: u8) -> Self {
+	fn from(x: u8) -> Self {
 		Opcode(x)
-    }
+	}
 }
 
 impl From<SymByte> for Opcode {
-    fn from(x: SymByte) -> Self {
+	fn from(x: SymByte) -> Self {
 		match x {
 			SymByte::Concrete(x) => Opcode::from(x),
-			_ => panic!("can only create opcode from concrete byte")
+			_ => panic!("can only create opcode from concrete byte"),
 		}
-    }
+	}
 }
+
+pub static OPCODE_STR_TABLE: [&str; 256] = {
+	let mut table = ["UNKNOWN"; 256];
+	table[Opcode::STOP.as_usize()] = "STOP";
+	table[Opcode::ADD.as_usize()] = "ADD";
+	table[Opcode::MUL.as_usize()] = "MUL";
+	table[Opcode::SUB.as_usize()] = "SUB";
+	table[Opcode::DIV.as_usize()] = "DIV";
+	table[Opcode::SDIV.as_usize()] = "SDIV";
+	table[Opcode::MOD.as_usize()] = "MOD";
+	table[Opcode::SMOD.as_usize()] = "SMOD";
+	table[Opcode::ADDMOD.as_usize()] = "ADDMOD";
+	table[Opcode::MULMOD.as_usize()] = "MULMOD";
+	table[Opcode::EXP.as_usize()] = "EXP";
+	table[Opcode::SIGNEXTEND.as_usize()] = "SIGNEXTEND";
+	table[Opcode::LT.as_usize()] = "LT";
+	table[Opcode::GT.as_usize()] = "GT";
+	table[Opcode::SLT.as_usize()] = "SLT";
+	table[Opcode::SGT.as_usize()] = "SGT";
+	table[Opcode::EQ.as_usize()] = "EQ";
+	table[Opcode::ISZERO.as_usize()] = "ISZERO";
+	table[Opcode::AND.as_usize()] = "AND";
+	table[Opcode::OR.as_usize()] = "OR";
+	table[Opcode::XOR.as_usize()] = "XOR";
+	table[Opcode::NOT.as_usize()] = "NOT";
+	table[Opcode::BYTE.as_usize()] = "BYTE";
+	table[Opcode::CALLDATALOAD.as_usize()] = "CALLDATALOAD";
+	table[Opcode::CALLDATASIZE.as_usize()] = "CALLDATASIZE";
+	table[Opcode::CALLDATACOPY.as_usize()] = "CALLDATACOPY";
+	table[Opcode::CODESIZE.as_usize()] = "CODESIZE";
+	table[Opcode::CODECOPY.as_usize()] = "CODECOPY";
+	table[Opcode::SHL.as_usize()] = "SHL";
+	table[Opcode::SHR.as_usize()] = "SHR";
+	table[Opcode::SAR.as_usize()] = "SAR";
+	table[Opcode::POP.as_usize()] = "POP";
+	table[Opcode::MLOAD.as_usize()] = "MLOAD";
+	table[Opcode::MSTORE.as_usize()] = "MSTORE";
+	table[Opcode::MSTORE8.as_usize()] = "MSTORE8";
+	table[Opcode::JUMP.as_usize()] = "JUMP";
+	table[Opcode::JUMPI.as_usize()] = "JUMPI";
+	table[Opcode::PC.as_usize()] = "PC";
+	table[Opcode::MSIZE.as_usize()] = "MSIZE";
+	table[Opcode::JUMPDEST.as_usize()] = "JUMPDEST";
+	table[Opcode::PUSH1.as_usize()] = "PUSH1";
+	table[Opcode::PUSH2.as_usize()] = "PUSH2";
+	table[Opcode::PUSH3.as_usize()] = "PUSH3";
+	table[Opcode::PUSH4.as_usize()] = "PUSH4";
+	table[Opcode::PUSH5.as_usize()] = "PUSH5";
+	table[Opcode::PUSH6.as_usize()] = "PUSH6";
+	table[Opcode::PUSH7.as_usize()] = "PUSH7";
+	table[Opcode::PUSH8.as_usize()] = "PUSH8";
+	table[Opcode::PUSH9.as_usize()] = "PUSH9";
+	table[Opcode::PUSH10.as_usize()] = "PUSH10";
+	table[Opcode::PUSH11.as_usize()] = "PUSH11";
+	table[Opcode::PUSH12.as_usize()] = "PUSH12";
+	table[Opcode::PUSH13.as_usize()] = "PUSH13";
+	table[Opcode::PUSH14.as_usize()] = "PUSH14";
+	table[Opcode::PUSH15.as_usize()] = "PUSH15";
+	table[Opcode::PUSH16.as_usize()] = "PUSH16";
+	table[Opcode::PUSH17.as_usize()] = "PUSH17";
+	table[Opcode::PUSH18.as_usize()] = "PUSH18";
+	table[Opcode::PUSH19.as_usize()] = "PUSH19";
+	table[Opcode::PUSH20.as_usize()] = "PUSH20";
+	table[Opcode::PUSH21.as_usize()] = "PUSH21";
+	table[Opcode::PUSH22.as_usize()] = "PUSH22";
+	table[Opcode::PUSH23.as_usize()] = "PUSH23";
+	table[Opcode::PUSH24.as_usize()] = "PUSH24";
+	table[Opcode::PUSH25.as_usize()] = "PUSH25";
+	table[Opcode::PUSH26.as_usize()] = "PUSH26";
+	table[Opcode::PUSH27.as_usize()] = "PUSH27";
+	table[Opcode::PUSH28.as_usize()] = "PUSH28";
+	table[Opcode::PUSH29.as_usize()] = "PUSH29";
+	table[Opcode::PUSH30.as_usize()] = "PUSH30";
+	table[Opcode::PUSH31.as_usize()] = "PUSH31";
+	table[Opcode::PUSH32.as_usize()] = "PUSH32";
+	table[Opcode::DUP1.as_usize()] = "DUP1";
+	table[Opcode::DUP2.as_usize()] = "DUP2";
+	table[Opcode::DUP3.as_usize()] = "DUP3";
+	table[Opcode::DUP4.as_usize()] = "DUP4";
+	table[Opcode::DUP5.as_usize()] = "DUP5";
+	table[Opcode::DUP6.as_usize()] = "DUP6";
+	table[Opcode::DUP7.as_usize()] = "DUP7";
+	table[Opcode::DUP8.as_usize()] = "DUP8";
+	table[Opcode::DUP9.as_usize()] = "DUP9";
+	table[Opcode::DUP10.as_usize()] = "DUP10";
+	table[Opcode::DUP11.as_usize()] = "DUP11";
+	table[Opcode::DUP12.as_usize()] = "DUP12";
+	table[Opcode::DUP13.as_usize()] = "DUP13";
+	table[Opcode::DUP14.as_usize()] = "DUP14";
+	table[Opcode::DUP15.as_usize()] = "DUP15";
+	table[Opcode::DUP16.as_usize()] = "DUP16";
+	table[Opcode::SWAP1.as_usize()] = "SWAP1";
+	table[Opcode::SWAP2.as_usize()] = "SWAP2";
+	table[Opcode::SWAP3.as_usize()] = "SWAP3";
+	table[Opcode::SWAP4.as_usize()] = "SWAP4";
+	table[Opcode::SWAP5.as_usize()] = "SWAP5";
+	table[Opcode::SWAP6.as_usize()] = "SWAP6";
+	table[Opcode::SWAP7.as_usize()] = "SWAP7";
+	table[Opcode::SWAP8.as_usize()] = "SWAP8";
+	table[Opcode::SWAP9.as_usize()] = "SWAP9";
+	table[Opcode::SWAP10.as_usize()] = "SWAP10";
+	table[Opcode::SWAP11.as_usize()] = "SWAP11";
+	table[Opcode::SWAP12.as_usize()] = "SWAP12";
+	table[Opcode::SWAP13.as_usize()] = "SWAP13";
+	table[Opcode::SWAP14.as_usize()] = "SWAP14";
+	table[Opcode::SWAP15.as_usize()] = "SWAP15";
+	table[Opcode::SWAP16.as_usize()] = "SWAP16";
+	table[Opcode::RETURN.as_usize()] = "RETURN";
+	table[Opcode::REVERT.as_usize()] = "REVERT";
+	table[Opcode::INVALID.as_usize()] = "INVALID";
+	table[Opcode::SHA3.as_usize()] = "SHA3";
+	table[Opcode::ADDRESS.as_usize()] = "ADDRESS";
+	table[Opcode::BALANCE.as_usize()] = "BALANCE";
+	table[Opcode::SELFBALANCE.as_usize()] = "SELFBALANCE";
+	table[Opcode::BASEFEE.as_usize()] = "BASEFEE";
+	table[Opcode::ORIGIN.as_usize()] = "ORIGIN";
+	table[Opcode::CALLER.as_usize()] = "CALLER";
+	table[Opcode::CALLVALUE.as_usize()] = "CALLVALUE";
+	table[Opcode::GASPRICE.as_usize()] = "GASPRICE";
+	table[Opcode::EXTCODESIZE.as_usize()] = "EXTCODESIZE";
+	table[Opcode::EXTCODECOPY.as_usize()] = "EXTCODECOPY";
+	table[Opcode::EXTCODEHASH.as_usize()] = "EXTCODEHASH";
+	table[Opcode::RETURNDATASIZE.as_usize()] = "RETURNDATASIZE";
+	table[Opcode::RETURNDATACOPY.as_usize()] = "RETURNDATACOPY";
+	table[Opcode::BLOCKHASH.as_usize()] = "BLOCKHASH";
+	table[Opcode::COINBASE.as_usize()] = "COINBASE";
+	table[Opcode::TIMESTAMP.as_usize()] = "TIMESTAMP";
+	table[Opcode::NUMBER.as_usize()] = "NUMBER";
+	table[Opcode::DIFFICULTY.as_usize()] = "DIFFICULTY";
+	table[Opcode::GASLIMIT.as_usize()] = "GASLIMIT";
+	table[Opcode::SLOAD.as_usize()] = "SLOAD";
+	table[Opcode::SSTORE.as_usize()] = "SSTORE";
+	table[Opcode::GAS.as_usize()] = "GAS";
+	table[Opcode::LOG0.as_usize()] = "LOG0";
+	table[Opcode::LOG1.as_usize()] = "LOG1";
+	table[Opcode::LOG2.as_usize()] = "LOG2";
+	table[Opcode::LOG3.as_usize()] = "LOG3";
+	table[Opcode::LOG4.as_usize()] = "LOG4";
+	table[Opcode::CREATE.as_usize()] = "CREATE";
+	table[Opcode::CREATE2.as_usize()] = "CREATE2";
+	table[Opcode::CALL.as_usize()] = "CALL";
+	table[Opcode::CALLCODE.as_usize()] = "CALLCODE";
+	table[Opcode::DELEGATECALL.as_usize()] = "DELEGATECALL";
+	table[Opcode::STATICCALL.as_usize()] = "STATICCALL";
+	table[Opcode::SUICIDE.as_usize()] = "SUICIDE";
+	table[Opcode::CHAINID.as_usize()] = "CHAINID";
+	table
+};

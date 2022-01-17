@@ -2,7 +2,7 @@
 mod macros;
 mod system;
 
-use crate::{CallScheme, ExitReason, Handler, Opcode, Runtime};
+use crate::{CallScheme, ExitReason, Handler, Opcode, Runtime, SymbolicRuntime, SymbolicMachineState};
 
 pub enum Control<H: Handler> {
 	Continue,
@@ -11,8 +11,15 @@ pub enum Control<H: Handler> {
 	Exit(ExitReason),
 }
 
-fn handle_other<H: Handler>(state: &mut Runtime, opcode: Opcode, handler: &mut H) -> Control<H> {
-	match handler.other(opcode, &mut state.machine) {
+fn handle_other<H: Handler>(handler: &mut H) -> Control<H> {
+	match handler.other() {
+		Ok(()) => Control::Continue,
+		Err(e) => Control::Exit(e.into()),
+	}
+}
+
+fn sym_handle_other<H: Handler>(handler: &mut H) -> Control<H> {
+	match handler.other() {
 		Ok(()) => Control::Continue,
 		Err(e) => Control::Exit(e.into()),
 	}
@@ -56,6 +63,13 @@ pub fn eval<H: Handler>(state: &mut Runtime, opcode: Opcode, handler: &mut H) ->
 		Opcode::STATICCALL => system::call(state, CallScheme::StaticCall, handler),
 		Opcode::CHAINID => system::chainid(state, handler),
 		Opcode::BASEFEE => system::base_fee(state, handler),
-		_ => handle_other(state, opcode, handler),
+		_ => handle_other(handler),
+	}
+}
+
+pub fn sym_eval<H: Handler>(runtime: &SymbolicRuntime, opcode: Opcode, handler: &mut H, state: &mut SymbolicMachineState) -> Control<H> {
+	match opcode {
+		Opcode::CALLVALUE => system::sym::callvalue(runtime, state),
+		_ => sym_handle_other(handler),
 	}
 }

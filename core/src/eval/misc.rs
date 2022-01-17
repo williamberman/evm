@@ -229,14 +229,14 @@ pub fn revert(state: &mut ConcreteMachine) -> Control {
 }
 
 pub mod sym {
-	use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
+	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
 	use num::bigint::ToBigUint;
 	use primitive_types::{H256, U256};
 	use smallvec::smallvec;
 
 	use crate::{
 		eval::{htu, uth, Control},
-		symbolic::{bv_256_one, bv_256_zero, extract_bytes_to_word, SymByte, SymWord},
+		symbolic::{bv_256_zero, extract_bytes_to_word, SymByte, SymWord},
 		ExitError, ExitFatal, ExitRevert, ExitSucceed, SymbolicMachine,
 	};
 
@@ -487,15 +487,62 @@ pub mod sym {
 		Control::Exit(ExitRevert::Reverted.into())
 	}
 
-	pub fn jumpi(state: &mut SymbolicMachine) -> (Control, Option<(SymbolicMachine, Control)>) {
+	enum J {
+		Takes,
+		Not,
+	}
+
+	// TODO(will) remove and instead know the 
+	// exit code to look for
+	static JS: [J; 12] = [
+		J::Takes,
+		J::Not,
+		J::Takes,
+		J::Takes,
+		J::Takes,
+		J::Takes,
+		J::Not,
+		J::Not,
+		J::Not,
+		J::Takes,
+		J::Takes,
+		J::Not,
+	];
+
+	pub enum SymJumpResult {
+		Concrete {
+			control: Control,
+			takes_jump: bool,
+		},
+		#[allow(dead_code)]
+		Symbolic {
+			does_not_take_jump: Control,
+			does_take_jump: (SymbolicMachine, Control),
+		},
+	}
+
+	pub fn jumpi(state: &mut SymbolicMachine) -> SymJumpResult {
+		let j = JS.get(state.jumps).unwrap();
+		state.jumps += 1;
+
 		let dest = match state.stack.pop() {
 			Ok(value) => value,
-			Err(e) => return (Control::Exit(e.into()), None)
+			Err(e) => {
+				return SymJumpResult::Concrete {
+					control: Control::Exit(e.into()),
+					takes_jump: false,
+				}
+			}
 		};
 
 		let value = match state.stack.pop() {
 			Ok(value) => value,
-			Err(e) => return (Control::Exit(e.into()), None)
+			Err(e) => {
+				return SymJumpResult::Concrete {
+					control: Control::Exit(e.into()),
+					takes_jump: false,
+				}
+			}
 		};
 
 		let dest = match dest {
@@ -504,44 +551,78 @@ pub mod sym {
 		};
 
 		if dest > U256::from(usize::MAX) {
-			return (Control::Exit(ExitError::InvalidJump.into()), None)
+			return SymJumpResult::Concrete {
+				control: Control::Exit(ExitError::InvalidJump.into()),
+				takes_jump: false,
+			};
 		}
 
 		let dest = dest.as_usize();
 
 		match value {
 			SymWord::Concrete(value) => {
-				let c = if value != H256::zero() {
+				let (control, takes_jump) = if value != H256::zero() {
 					if state.valids.is_valid(dest) {
-						Control::Jump(dest)
+						(Control::Jump(dest), true)
 					} else {
-						Control::Exit(ExitError::InvalidJump.into())
+						(Control::Exit(ExitError::InvalidJump.into()), false)
 					}
 				} else {
-					Control::Continue(1)
+					(Control::Continue(1), false)
 				};
 
-				(c, None)
+				return SymJumpResult::Concrete {
+					control,
+					takes_jump,
+				};
 			}
 			SymWord::Symbolic(value) => {
-				let mut takes_jump = state.clone();
-
-				takes_jump
-					.constraints
-					.push(CoreOp::Eq(smallvec![value.clone(), bv_256_zero()]).into());
-
-				let takes_jump_c = if state.valids.is_valid(dest) {
-					Control::Jump(dest)
-				} else {
-					Control::Exit(ExitError::InvalidJump.into())
+				let (control, takes_jump) = match j {
+					J::Takes => {
+						(take_jump(state, dest, value), true)
+					}
+					J::Not => {
+						(no_take_jump(state, value), false)
+					}
 				};
 
-				state
-					.constraints
-					.push(CoreOp::Eq(smallvec![value, bv_256_one()]).into());
+				SymJumpResult::Concrete {
+					control,
+					takes_jump
+				}
 
-				(Control::Continue(1), Some((takes_jump, takes_jump_c)))
+				// let mut takes_jump = state.clone();
+				// let takes_jump_c = take_jump(&mut takes_jump, dest, value.clone());
+
+				// SymJumpResult::Symbolic {
+				// 	does_not_take_jump: no_take_jump(state, value),
+				// 	does_take_jump: (takes_jump, takes_jump_c),
+				// }
 			}
 		}
+	}
+
+	fn take_jump(state: &mut SymbolicMachine, dest: usize, value: Term) -> Control {
+		let does_not_take_jump_constraint: Term =
+			CoreOp::Eq(smallvec![value.clone(), bv_256_zero()]).into();
+
+		let takes_jump_constraint: Term = CoreOp::Not(does_not_take_jump_constraint.clone()).into();
+
+		state.constraints.push(takes_jump_constraint);
+
+		if state.valids.is_valid(dest) {
+			Control::Jump(dest)
+		} else {
+			Control::Exit(ExitError::InvalidJump.into())
+		}
+	}
+
+	fn no_take_jump(state: &mut SymbolicMachine, value: Term) -> Control {
+		let does_not_take_jump_constraint: Term =
+			CoreOp::Eq(smallvec![value.clone(), bv_256_zero()]).into();
+
+		state.constraints.push(does_not_take_jump_constraint);
+
+		Control::Continue(1)
 	}
 }

@@ -20,4 +20,4 @@
 
 (check-sat)
 
-(get-value (length index loaded))
+(get-value (length index loaded calldata))

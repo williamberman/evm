@@ -127,9 +127,9 @@ static BYTE: OpEvals = OpEvals {
 	},
 };
 
-op2_evals_fn!(SHL, self::bitwise::shl, BvOp::BvShl);
-op2_evals_fn!(SHR, self::bitwise::shr, BvOp::BvLshr);
-op2_evals_fn!(SAR, self::bitwise::sar, BvOp::BvAshr);
+op2_evals_fn!(SHL, self::bitwise::shl, self::bitwise::sym::shl);
+op2_evals_fn!(SHR, self::bitwise::shr, self::bitwise::sym::shr);
+op2_evals_fn!(SAR, self::bitwise::sar, self::bitwise::sym::sar);
 
 static CODESIZE: OpEvals = OpEvals {
 	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
@@ -223,9 +223,17 @@ static JUMP: OpEvals = OpEvals {
 	},
 };
 
-fn eval_jumpi(state: &mut ConcreteMachine, _opcode: Opcode, _position: usize) -> Control {
-	self::misc::jumpi(state)
-}
+static JUMPI: OpEvals = OpEvals {
+	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, _position: usize| -> Control {
+		self::misc::jumpi(state)
+	},
+	symbolic: |_state: &mut SymbolicMachine, _opcode: Opcode, _position: usize| -> Control {
+		// JUMPI -- handled in the `step` function. It is the only function
+		// which potentially returns additional machines and so has a different
+		// signature than the rest of the opcodes in the dispatch table.
+		panic!("not reachable")
+	},
+};
 
 static PC: OpEvals = OpEvals {
 	concrete: |state: &mut ConcreteMachine, _opcode: Opcode, position: usize| -> Control {
@@ -388,7 +396,7 @@ pub static CONCRETE_TABLE: DispatchTable<H256, Vec<u8>, u8, u8> = {
 	table[Opcode::MSTORE.as_usize()] = MSTORE.concrete as _;
 	table[Opcode::MSTORE8.as_usize()] = MSTORE8.concrete as _;
 	table[Opcode::JUMP.as_usize()] = JUMP.concrete as _;
-	table[Opcode::JUMPI.as_usize()] = eval_jumpi as _;
+	table[Opcode::JUMPI.as_usize()] = JUMPI.concrete as _;
 	table[Opcode::PC.as_usize()] = PC.concrete as _;
 	table[Opcode::MSIZE.as_usize()] = MSIZE.concrete as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.concrete as _;
@@ -506,9 +514,7 @@ pub static SYMBOLIC_TABLE: DispatchTable<SymWord, SymbolicCalldata, SymByte, Sym
 	table[Opcode::MSTORE.as_usize()] = MSTORE.symbolic as _;
 	table[Opcode::MSTORE8.as_usize()] = MSTORE8.symbolic as _;
 	table[Opcode::JUMP.as_usize()] = JUMP.symbolic as _;
-	// JUMPI -- handled in the `step` function. It is the only function
-	// which potentially returns additional machines and so has a different
-	// signature than the rest of the opcodes in the dispatch table.
+	table[Opcode::JUMPI.as_usize()] = JUMPI.symbolic as _;
 	table[Opcode::PC.as_usize()] = PC.symbolic as _;
 	table[Opcode::MSIZE.as_usize()] = MSIZE.symbolic as _;
 	table[Opcode::JUMPDEST.as_usize()] = JUMPDEST.symbolic as _;

@@ -3,7 +3,7 @@
 use std::{convert::TryFrom, fmt::Display, ops::Deref};
 
 use amzn_smt_ir::{
-	logic::{BvOp, ALL},
+	logic::{BvOp, ALL, all::Op, ArrayOp},
 	Binary, Command, Constant, Decimal, Hexadecimal, IConst, ISort, ISymbol, Numeral, Script, Term,
 };
 use num::{self, bigint::ToBigUint};
@@ -151,7 +151,7 @@ fn script(variables: &[(Term<ALL>, ISort)], assertions: &[Term<ALL>]) -> Script<
 #[derive(Debug)]
 pub struct Solution {
 	#[allow(dead_code)]
-	bindings: Vec<(ISymbol, Term)>,
+	pub bindings: Vec<(ISymbol, Term)>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +192,14 @@ impl Solution {
 			_ => {
 				panic!("{} {:?}", "Can only look up variables in solutions", "t")
 			}
+		}
+	}
+
+	pub fn get_hexadecimal(&self, t: &Term) -> Hexadecimal {
+		if let Native::Hexadecimal(n) = self.get(t).unwrap() {
+			return n
+		} else {
+			panic!("not hexadecimal")
 		}
 	}
 }
@@ -349,6 +357,7 @@ pub fn extract_bytes_to_word(
 
 		match symbytes[read_from_index].clone() {
 			SymByte::Concrete(byte) => {
+				// TODO off by one error here
 				concrete_bytes[write_into_offset + nth_byte] = byte;
 				bv_8_n(byte)
 			}
@@ -361,8 +370,7 @@ pub fn extract_bytes_to_word(
 
 	term = f(0);
 
-	#[allow(clippy::needless_range_loop)]
-	for write_into_index in 1..32 {
+	for write_into_index in 1..extract_n_bytes {
 		let t = f(write_into_index);
 		term = BvOp::Concat(term, t).into()
 	}
@@ -372,4 +380,25 @@ pub fn extract_bytes_to_word(
 	} else {
 		SymWord::Symbolic(term)
 	}
+}
+
+pub fn parse_calldata_let(t: &Term) -> (Term, Term, Term) {
+	if let Term::Let(l) = t {
+		let b = l.bindings.get(0).unwrap();
+		if let Term::OtherOp(tt) = &b.1 {
+			match tt.as_ref() {
+				Op::Array(ttt) => match ttt {
+					ArrayOp::Store(store_in, index, value) => {
+						return (store_in.clone(), index.clone(), value.clone());
+					}
+					_ => panic!("must be store"),
+				},
+				_ => panic!("must be array"),
+			}
+		} else {
+			panic!("must be other")
+		};
+	} else {
+		panic!("must be let")
+	};
 }

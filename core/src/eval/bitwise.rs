@@ -104,7 +104,7 @@ pub fn sar(shift: U256, value: U256) -> U256 {
 }
 
 pub mod sym {
-	use amzn_smt_ir::{logic::BvOp, CoreOp, Index};
+	use amzn_smt_ir::{logic::BvOp, CoreOp, Index, Term};
 	use num::bigint::ToBigUint;
 	use primitive_types::H256;
 
@@ -192,5 +192,18 @@ pub mod sym {
 		push!(state, ret);
 
 		Control::Continue(1)
+	}
+
+	pub fn shl(op1: Term, op2: Term) -> Term {
+		// Args flipped on purpose
+		BvOp::BvShl(op2, op1).into()
+	}
+
+	pub fn shr(op1: Term, op2: Term) -> Term {
+		BvOp::BvLshr(op2, op1).into()
+	}
+
+	pub fn sar(op1: Term, op2: Term) -> Term {
+		BvOp::BvAshr(op2, op1).into()
 	}
 }

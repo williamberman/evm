@@ -28,6 +28,7 @@ mod handler;
 mod interrupt;
 
 pub use evm_core::*;
+use std::cell::RefCell;
 
 pub use crate::context::{CallScheme, Context, CreateScheme};
 pub use crate::handler::{Handler, Transfer};
@@ -115,12 +116,7 @@ pub struct Runtime<'config> {
 
 impl<'config> Runtime<'config> {
 	/// Create a new runtime with given code and data.
-	pub fn new(
-		code: Vec<u8>,
-		data: Vec<u8>,
-		context: Context,
-		config: &'config Config,
-	) -> Self {
+	pub fn new(code: Vec<u8>, data: Vec<u8>, context: Context, config: &'config Config) -> Self {
 		Self {
 			machine: ConcreteMachine::new(code, data, config.stack_limit, config.memory_limit),
 			status: Ok(()),
@@ -133,6 +129,10 @@ impl<'config> Runtime<'config> {
 	/// Get a reference to the machine.
 	pub fn machine(&self) -> &ConcreteMachine {
 		&self.machine
+	}
+
+	pub fn machine_mut(&mut self) -> &mut ConcreteMachine {
+		&mut self.machine
 	}
 
 	/// Get a reference to the execution context.
@@ -156,6 +156,142 @@ impl<'config> Runtime<'config> {
 		loop {
 			step!(self, handler, return;)
 		}
+	}
+}
+
+pub struct SymbolicMachineState {
+	pub machine: SymbolicMachine,
+	// Ok(()) means active
+	// ExitReason means terminal
+	pub status: Result<(), ExitReason>,
+	#[allow(dead_code)]
+	pub return_data_buffer: Vec<u8>,
+}
+
+pub struct SymbolicRuntime<'config> {
+	// TODO(will) - using ref cells to allow multiple borrowings of self as mutable
+	// in `step`. There's probably a better pattern to managing the memory.
+	pub machines: Vec<RefCell<SymbolicMachineState>>,
+	context: Context,
+	_config: &'config Config,
+}
+
+impl<'config> SymbolicRuntime<'config> {
+	pub fn new(
+		code: Vec<u8>,
+		data: SymbolicCalldata,
+		context: Context,
+		config: &'config Config,
+	) -> Self {
+		let code = code.into_iter().map(|b| SymByte::Concrete(b)).collect();
+		Self {
+			machines: vec![RefCell::new(SymbolicMachineState {
+				machine: SymbolicMachine::new(code, data, config.stack_limit, config.memory_limit),
+				status: Ok(()),
+				return_data_buffer: Vec::new(),
+			})],
+			context,
+			_config: config,
+		}
+	}
+
+	/// Get a reference to the execution context.
+	pub fn context(&self) -> &Context {
+		&self.context
+	}
+
+	pub fn handle_trap<H: Handler>(
+		&self,
+		opcode: Opcode,
+		handler: &mut H,
+		machine_state: &mut SymbolicMachineState,
+	) {
+		match eval::sym_eval(self, opcode, handler, machine_state) {
+			eval::Control::Continue => {}
+			eval::Control::CallInterrupt(_interrupt) => {
+				panic!("TODO -- I believe this should not be reached");
+			}
+			eval::Control::CreateInterrupt(_interrupt) => {
+				panic!("TODO -- I believe this should not be reached");
+			}
+			eval::Control::Exit(exit) => {
+				machine_state.machine.exit(exit.clone().into());
+				machine_state.status = Err(exit.clone());
+			}
+		}
+	}
+
+	pub fn machine(&self) -> Option<usize> {
+		self.machines.iter().position(|b| b.borrow().status.is_ok())
+	}
+
+	// TODO(will): We are ignoring gas for now
+	fn step<'a, H: Handler>(&'a mut self, handler: &mut H, idx: usize) {
+		let additional = {
+			let mut machine_state = self.machines.get(idx).unwrap().borrow_mut();
+
+			let (result, additional) = machine_state.machine.step();
+
+			match result {
+				Ok(()) => {}
+				Err(Capture::Exit(e)) => {
+					machine_state.status = Err(e.clone());
+				}
+				Err(Capture::Trap(opcode)) => {
+					self.handle_trap(opcode, handler, &mut machine_state);
+				}
+			}
+
+			additional
+		};
+
+		for (m, xresult) in additional {
+			match xresult {
+				Ok(()) => self.machines.push(RefCell::new(SymbolicMachineState {
+					machine: m,
+					status: Ok(()),
+					return_data_buffer: vec![],
+				})),
+				Err(Capture::Exit(e)) => self.machines.push(RefCell::new(SymbolicMachineState {
+					machine: m,
+					status: Err(e.clone()),
+					return_data_buffer: vec![],
+				})),
+				Err(Capture::Trap(opcode)) => {
+					let machine_state = SymbolicMachineState {
+						machine: m,
+						status: Ok(()),
+						return_data_buffer: vec![],
+					};
+					self.machines.push(RefCell::new(machine_state));
+					let mut machine_state = self.machines.last().unwrap().borrow_mut();
+					self.handle_trap(opcode, handler, &mut machine_state);
+				}
+			};
+		}
+	}
+
+	pub fn run<'a, H: Handler>(&'a mut self, handler: &mut H) {
+		loop {
+			match self.machine() {
+				Some(idx) => self.step(handler, idx),
+				None => return,
+			}
+		}
+	}
+
+	// fn machine_state_mut(&mut self) -> &mut SymbolicMachineState {
+	// 	let len = self.machines.len();
+	// 	self.machines.get(len - 1).unwrap().borrow_mut()
+	// }
+
+	// pub fn machine_mut(&mut self) -> &mut SymbolicMachine {
+	// 	&mut self.machine_state_mut().machine
+	// }
+
+	pub fn unhandled_interrupt(&mut self, state: &mut SymbolicMachineState) {
+		state.status = Err(ExitFatal::UnhandledInterrupt.into());
+		state.machine.exit(ExitFatal::UnhandledInterrupt.into());
 	}
 }
 

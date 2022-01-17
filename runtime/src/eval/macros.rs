@@ -32,7 +32,18 @@ macro_rules! pop_u256 {
 macro_rules! push {
 	( $machine:expr, $( $x:expr ),* ) => (
 		$(
-			match $machine.machine.stack_mut().push($x) {
+			match $machine.machine_mut().stack_mut().push($x) {
+				Ok(()) => (),
+				Err(e) => return Control::Exit(e.into()),
+			}
+		)*
+	)
+}
+
+macro_rules! push_sym {
+	( $machine_state:expr, $( $x:expr ),* ) => (
+		$(
+			match $machine_state.machine.stack_mut().push($x) {
 				Ok(()) => (),
 				Err(e) => return Control::Exit(e.into()),
 			}

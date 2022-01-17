@@ -1,6 +1,5 @@
 use crate::{Capture, Context, CreateScheme, ExitError, ExitReason, Opcode, Stack};
 use alloc::vec::Vec;
-use evm_core::ConcreteMachine;
 use primitive_types::{H160, H256, U256};
 
 /// Transfer from source to target, with given value.
@@ -116,7 +115,7 @@ pub trait Handler {
 		stack: &Stack<H256>,
 	) -> Result<(), ExitError>;
 	/// Handle other unknown external opcodes.
-	fn other(&mut self, _opcode: Opcode, _stack: &mut ConcreteMachine) -> Result<(), ExitError> {
+	fn other(&mut self) -> Result<(), ExitError> {
 		Err(ExitError::OutOfGas)
 	}
 }
